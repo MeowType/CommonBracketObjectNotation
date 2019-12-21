@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "target": "es2020",
+        "module": "esnext",
+        "moduleResolution": "node",
+        "strict": true,
+        "experimentalDecorators": true,
+        "outDir": "test/tsout",
+        "sourceMap": true,
+        "esModuleInterop": true,
+        "stripInternal": true,
+    },
+    "include": [
+        "./src/**/*.ts",
+        "./test/**/*.ts"
+    ],
+    "exclude": [
+        "tsout",
+        "node_modules"
+    ]
+}

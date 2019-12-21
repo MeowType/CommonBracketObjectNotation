@@ -1,0 +1,4 @@
+node_modules/
+test/*.js
+test/*.js.map
+package-lock.json

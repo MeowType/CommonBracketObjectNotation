@@ -1,0 +1,24 @@
+{
+  "name": "commonbracketobjectnotation",
+  "version": "1.0.0",
+  "description": "CommonBracketObjectNotation",
+  "main": "index.js",
+  "scripts": {
+    "tsc:dev": "tsc -p tsconfig.test.json",
+    "tsc:dev:watch": "tsc -w -p tsconfig.test.json",
+    "rollup:dev": "rollup -c rollup.config.test.js",
+    "rollup:dev:watch": "rollup -c rollup.config.test.js -w",
+    "debug": "node ./test/test.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MeowType/CommonBracketObjectNotation"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "rollup": "^1.27.13",
+    "rollup-plugin-typescript2": "^0.25.3",
+    "typescript": "^3.7.4"
+  }
+}
