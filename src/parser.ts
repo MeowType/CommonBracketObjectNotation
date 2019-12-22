@@ -80,7 +80,7 @@ export function parser(code: string) {
 }
 
 function root(ctx: Context, finish: (block: Block | Arr) => void) {
-    const items: Unit[] = []
+    const items: [Block | Arr] | KeyVal[] | Unit[] = []
     return (c: char) => {
         if (c === EOF) {
             if (items.length == 1) {
@@ -98,8 +98,14 @@ function root(ctx: Context, finish: (block: Block | Arr) => void) {
                 return finish(a)
             }
         } else if (c === '{') {
-            return ctx.callNoFirst(block, b => items.push(b))
-        } //todo
+            return ctx.callNoFirst(block, b => items.push(b as any))
+        } else if (c === '[') {
+            return ctx.callNoFirst(arr, a => items.push(a as any))
+        } else {
+            return ctx.call(key, kv => {
+                items.push(kv)
+            })
+        }
     }
 }
 
@@ -127,7 +133,7 @@ function block(ctx: Context, finish: (block: Block) => void) {
 function arr(ctx: Context, finish: (block: Arr) => void) {
     const items: Unit[] = []
     return (c: char) => { 
-        if (c === EOF || c == ']' || c === ':' || c === '=') {
+        if (c === EOF || c === ':' || c === '=') {
             //todo throw
         } else if (reg_Space.test(c) || c === ',') {
             return
@@ -253,6 +259,7 @@ function num(ctx: Context, finish: (num: Num) => void) {
             const n = Number(`${int.join('')}.${float.join('')}`)
             ctx.end()
             finish(new Num(n))
+            return ReDo
         }
     }
 }

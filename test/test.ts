@@ -1,7 +1,8 @@
 import { parser } from '../src/parser'
 
 const r = parser(`{
-    a 1
+  f [ 1, 2.5 ]
+  g null
 }`)
 
 console.log(r)
