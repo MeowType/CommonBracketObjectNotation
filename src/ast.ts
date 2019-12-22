@@ -2,9 +2,11 @@ export abstract class Unit { }
 export class Null extends Unit {}
 export class Str extends Unit {
     val: string
-    constructor(val: string) {
+    col: '"' | "'"
+    constructor(val: string, col: '"' | "'") {
         super()
         this.val = val
+        this.col = col
     }
 }
 export class Num extends Unit {
@@ -21,18 +23,16 @@ export class Bool extends Unit {
         this.val = val
     }
 }
-export class Key extends Unit {
-    key: string
-    constructor(key: string) {
-        super()
+export class Key {
+    key: string | Str
+    constructor(key: string | Str) {
         this.key = key
     }
 }
-export class KeyVal extends Unit {
+export class KeyVal {
     key: Key
     val: Unit
     constructor(key: Key, val: Unit) {
-        super()
         this.key = key
         this.val = val
     }

@@ -1,12 +1,17 @@
-import { Unit, Block, KeyVal, Arr, Key, Num } from "./ast";
+import { Unit, Block, KeyVal, Arr, Key, Num, Str, Bool, Null } from "./ast";
 import { isVoid } from "./utils";
+
+type TailParams<T extends (...a: any[]) => any> = T extends (_: any, ...a: infer L) => any ? L : never
 
 const EOF = Symbol('EOF')
 type char = string | typeof EOF
-const IgnoreFirst = Symbol('IgnoreFirst')
 const ReDo = Symbol('ReDo')
 type BaseParserUnit = (c: char) => void | typeof ReDo | ParserUnit
-type ParserUnit = BaseParserUnit | readonly [BaseParserUnit, typeof IgnoreFirst]
+type ParserUnitFn = (ctx: Context, ...a: any[]) => BaseParserUnit
+interface ParserUnit {
+    fn: BaseParserUnit
+    ignoreFirst: boolean
+}
 
 const reg_Space = /\s/
 const reg_Num = /(\d|_)/
@@ -29,13 +34,10 @@ class State {
         if (!isVoid(r)) {
             if (r === ReDo) {
                 this.call(c)
-            } else if (typeof r === 'function') {
-                this.push(r)
-                this.call(c)
             } else {
-                const [nc, flag] = r
-                this.push(nc)
-                if (flag !== IgnoreFirst) this.call(c)
+                const { fn, ignoreFirst} = r
+                this.push(fn)
+                if (!ignoreFirst) this.call(c)
             }
         }
     }
@@ -48,6 +50,18 @@ class Context {
     }
     end() {
         this.state.pop()
+    }
+    call<F extends ParserUnitFn>(f: F, ...p: TailParams<F>): ParserUnit {
+        return {
+            fn: f(this, ...p),
+            ignoreFirst: false
+        }
+    }
+    callNoFirst<F extends ParserUnitFn>(f: F, ...p: TailParams<F>): ParserUnit {
+        return {
+            fn: f(this, ...p),
+            ignoreFirst: true
+        }
     }
 }
 
@@ -84,27 +98,50 @@ function root(ctx: Context, finish: (block: Block | Arr) => void) {
                 return finish(a)
             }
         } else if (c === '{') {
-            return [block(ctx, b => items.push(b)), IgnoreFirst] as const
+            return ctx.callNoFirst(block, b => items.push(b))
         } //todo
     }
 }
 
-function block(ctx: Context, add: (block: Block) => void) {
+function block(ctx: Context, finish: (block: Block) => void) {
     const items: KeyVal[] = []
     return (c: char) => {
         if (c === EOF) {
-            
+            //todo throw
         } else if (reg_Space.test(c) || c === ',') {
             return
         } else if (c === '}') {
             ctx.end()
-            add(new Block(items))
+            finish(new Block(items))
             return
         } else if (c === '{' || c === '[' || c === ']' || c === ':' || c === '=') {
             //todo throw
         } else {
-            return key(ctx, kv => {
+            return ctx.call(key, kv => {
                 items.push(kv)
+            })
+        }
+    }
+}
+
+function arr(ctx: Context, finish: (block: Arr) => void) {
+    const items: Unit[] = []
+    return (c: char) => { 
+        if (c === EOF || c == ']' || c === ':' || c === '=') {
+            //todo throw
+        } else if (reg_Space.test(c) || c === ',') {
+            return
+        } else if (c === ']') {
+            ctx.end()
+            finish(new Arr(items))
+            return
+        } else if (c === '{') {
+            return ctx.callNoFirst(block, b => items.push(b))
+        } else if (c === '[') {
+            return ctx.callNoFirst(arr, a => items.push(a))
+        } else {
+            return ctx.call(val, u => {
+                items.push(u)
             })
         }
     }
@@ -112,16 +149,50 @@ function block(ctx: Context, add: (block: Block) => void) {
 
 function key(ctx: Context, finish: (kv: KeyVal) => void) {
     const chars: string[] = []
+    let s: Str | null = null
     return (c: char) => {
         if (c === EOF) {
             // todo throw
+        } else if (s != null) {
+            return ctx.call(val, v => {
+                const k = new Key(s!)
+                const kv = new KeyVal(k, v)
+                ctx.end()
+                finish(kv)
+            })
+        } else if (c === '"' || c === "'") {
+            if (chars.length !== 0 || s != null) {
+                return ctx.callNoFirst(str, c, s => {
+                    const k = new Key(chars.join(''))
+                    const kv = new KeyVal(k, s)
+                    ctx.end()
+                    finish(kv)
+                })
+            }
+            return ctx.callNoFirst(str, c, s => {
+                s = s
+            })
         } else if (reg_Space.test(c) || c === ':' || c === '=') {
-            return [val(ctx, v => {
+            return ctx.callNoFirst(val, v => {
                 const k = new Key(chars.join(''))
                 const kv = new KeyVal(k, v)
                 ctx.end()
                 finish(kv)
-            }), IgnoreFirst] as const
+            })
+        } else if (c === '{') {
+            return ctx.callNoFirst(block, b => {
+                const k = new Key(chars.join(''))
+                const kv = new KeyVal(k, b)
+                ctx.end()
+                finish(kv)
+            })
+        } else if (c === '[') {
+            return ctx.callNoFirst(arr, a => {
+                const k = new Key(chars.join(''))
+                const kv = new KeyVal(k, a)
+                ctx.end()
+                finish(kv)
+            })
         } else {
             chars.push(c)
         }
@@ -129,18 +200,37 @@ function key(ctx: Context, finish: (kv: KeyVal) => void) {
 }
 
 function val(ctx: Context, finish: (unit: Unit) => void) {
-    const chars: string[] = []
     return (c: char) => {
         if (c === EOF) {
             // todo throw
         } else if (reg_Space.test(c)) {
             return
-        } else if (c === ',') {
-            if (chars.length === 0) { } // todo throw
+        } else if (c === ',' || c === ':' || c === '=' || c === ',' || c === ']' || c === '}') {
+            //todo throw
         } else if (reg_Num.test(c)) {
-            return num(ctx, n => {
+            return ctx.call(num, n => {
                 ctx.end()
                 finish(n)
+            })
+        } else if (c === '"' || c === "'") {
+            return ctx.callNoFirst(str, c, s => {
+                ctx.end()
+                finish(s)
+            })
+        } else if (c === '{') {
+            return ctx.callNoFirst(block, b => {
+                ctx.end()
+                finish(b)
+            })
+        } else if (c === '[') {
+            return ctx.callNoFirst(arr, a => {
+                ctx.end()
+                finish(a)
+            })
+        } else {
+            return ctx.call(keyword, u => {
+                ctx.end()
+                finish(u)
             })
         }
     }
@@ -163,6 +253,42 @@ function num(ctx: Context, finish: (num: Num) => void) {
             const n = Number(`${int.join('')}.${float.join('')}`)
             ctx.end()
             finish(new Num(n))
+        }
+    }
+}
+
+function str(ctx: Context, first: '"' | "'", finish: (s: Str) => void) {
+    const chars: string[] = []
+    return (c: char) => { 
+        if (c === EOF) {
+            // todo throw
+        } else if (c === '"' || c === "'") {
+            if (c === first) {
+                const s = new Str(chars.join(''), first)
+                ctx.end()
+                finish(s)
+            } else {
+                chars.push(c)
+            }
+        } else {
+            //todo escape
+            chars.push(c)
+        }
+    }
+}
+
+function keyword(ctx: Context, finish: (u: Bool | Null) => void) {
+    const chars: string[] = []
+    return (c: char) => { 
+        if (c === EOF || reg_Space.test(c) || c === '"' || c === "'" || c === ':' || c === '=' || c === ',' || c === '[' || c === '{' || c === ']' || c === '}') {
+            const kw = chars.join('')
+            const u = kw === 'true' ? new Bool(true) : kw === 'false' ? new Bool(false) : kw === 'null' ? new Null : null
+            if (u == null) { return } //todo throw
+            ctx.end()
+            finish(u)
+            return ReDo
+        } else {
+            chars.push(c)
         }
     }
 }
