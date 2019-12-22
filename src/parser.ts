@@ -1,4 +1,4 @@
-import { Unit, Block, KeyVal, Arr, Key, Num, Str, Bool, Null } from "./ast";
+import { Unit, Block, KeyVal, Arr, Key, Num, Str, Bool, Null, Docs } from "./ast";
 import { isVoid } from "./utils";
 
 type TailParams<T extends (...a: any[]) => any> = T extends (_: any, ...a: infer L) => any ? L : never
@@ -68,9 +68,9 @@ class Context {
 export function parser(code: string) {
     const state = new State
     const ctx = new Context(state)
-    let rootAst: Block | Arr
-    state.push(root(ctx, (r) => {
-        rootAst = r
+    let rootAst: Docs
+    state.push(root(ctx, (d) => {
+        rootAst = d
     }))
     for (const c of code) {
         state.call(c)
@@ -79,35 +79,21 @@ export function parser(code: string) {
     return rootAst!
 }
 
-function root(ctx: Context, finish: (block: Block | Arr) => void) {
-    const items: [Block | Arr] | KeyVal[] | Unit[] = []
+function root(ctx: Context, finish: (docs: Docs) => void) {
+    const items: (Block | Arr)[] = []
     return (c: char) => {
         if (c === EOF) {
-            if (items.length == 1) {
-                const first = items[0]
-                if (first instanceof Block || first instanceof Arr) {
-                    return finish(first)
-                }
-            }
-            const first = items[0]
-            if (first instanceof KeyVal) {
-                const b = new Block(items as KeyVal[])
-                return finish(b)
-            } else {
-                const a = new Arr(items)
-                return finish(a)
-            }
+            finish(new Docs(items))
         } else if (c === '{') {
             return ctx.callNoFirst(block, b => items.push(b as any))
         } else if (c === '[') {
             return ctx.callNoFirst(arr, a => items.push(a as any))
         } else {
-            return ctx.call(key, kv => {
-                items.push(kv)
-            })
+            // todo throw
         }
     }
 }
+
 
 function block(ctx: Context, finish: (block: Block) => void) {
     const items: KeyVal[] = []
@@ -289,7 +275,7 @@ function keyword(ctx: Context, finish: (u: Bool | Null) => void) {
     return (c: char) => { 
         if (c === EOF || reg_Space.test(c) || c === '"' || c === "'" || c === ':' || c === '=' || c === ',' || c === '[' || c === '{' || c === ']' || c === '}') {
             const kw = chars.join('')
-            const u = kw === 'true' ? new Bool(true) : kw === 'false' ? new Bool(false) : kw === 'null' ? new Null : null
+            const u = checkkeyword(kw)
             if (u == null) { return } //todo throw
             ctx.end()
             finish(u)
@@ -298,4 +284,8 @@ function keyword(ctx: Context, finish: (u: Bool | Null) => void) {
             chars.push(c)
         }
     }
+}
+
+function checkkeyword(kw: string) {
+    return kw === 'true' ? new Bool(true) : kw === 'false' ? new Bool(false) : kw === 'null' ? new Null : null
 }

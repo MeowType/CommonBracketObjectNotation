@@ -1,8 +1,8 @@
 {
-  "name": "commonbracketobjectnotation",
+  "name": "cbon",
   "version": "1.0.0",
-  "description": "CommonBracketObjectNotation",
-  "main": "index.js",
+  "description": "Common Bracket Object Notation",
+  "main": "dist/index.js",
   "scripts": {
     "tsc:dev": "tsc -p tsconfig.test.json",
     "tsc:dev:watch": "tsc -w -p tsconfig.test.json",

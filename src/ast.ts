@@ -51,3 +51,10 @@ export class Arr extends Unit {
         this.items = items
     }
 }
+export class Docs extends Unit {
+    items: (Block | Arr)[]
+    constructor(items: (Block | Arr)[]) {
+        super()
+        this.items = items
+    }
+}
