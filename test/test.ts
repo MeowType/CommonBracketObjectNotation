@@ -1,4 +1,4 @@
-import { parser } from '../src/parser'
+import { parser } from '../src/index'
 
 const r = parser(`{
   a  1
