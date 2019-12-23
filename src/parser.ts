@@ -89,9 +89,7 @@ class Context {
     }
     range(last: boolean = false) {
         const n = last ? this.state.lastPos : this.state.pos 
-        const r = new TkRange(this.last_flag ?? n, n)
-        this.last_flag = n
-        return r
+        return new TkRange(this.last_flag ?? n, n)
     }
 }
 
@@ -146,14 +144,18 @@ function root(ctx: Context, finish: (docs: Docs) => void) {
 
 function block(ctx: Context, finish: (block: Block) => void) {
     const items: KeyVal[] = []
+    ctx.flag()
+    const begin = ctx.range()
     return (c: char) => {
         if (c === EOF) {
             //todo throw
         } else if (reg_Space.test(c) || c === ',') {
             return
         } else if (c === '}') {
+            ctx.flag()
+            const end = ctx.range()
             ctx.end()
-            finish(new Block(items))
+            finish(new Block(begin, end, items))
             return
         } else if (c === '{' || c === '[' || c === ']' || c === ':' || c === '=') {
             //todo throw
@@ -167,14 +169,18 @@ function block(ctx: Context, finish: (block: Block) => void) {
 
 function arr(ctx: Context, finish: (block: Arr) => void) {
     const items: Unit[] = []
+    ctx.flag()
+    const begin = ctx.range()
     return (c: char) => { 
         if (c === EOF || c === ':' || c === '=') {
             //todo throw
         } else if (reg_Space.test(c) || c === ',') {
             return
         } else if (c === ']') {
+            ctx.flag()
+            const end = ctx.range()
             ctx.end()
-            finish(new Arr(items))
+            finish(new Arr(begin, end, items))
             return
         } else if (c === '{') {
             return ctx.callNoFirst(block, b => items.push(b))
@@ -191,12 +197,13 @@ function arr(ctx: Context, finish: (block: Arr) => void) {
 function key(ctx: Context, finish: (kv: KeyVal) => void) {
     const chars: string[] = []
     let s: Str | null = null
+    ctx.flag()
     return (c: char) => {
         if (c === EOF) {
             // todo throw
         } else if (s != null) {
             return ctx.call(val, v => {
-                const k = new Key(s!)
+                const k = new Key(ctx.range(), s!)
                 const kv = new KeyVal(k, v)
                 ctx.end()
                 finish(kv)
@@ -204,7 +211,7 @@ function key(ctx: Context, finish: (kv: KeyVal) => void) {
         } else if (c === '"' || c === "'") {
             if (chars.length !== 0 || s != null) {
                 return ctx.callNoFirst(str, c, s => {
-                    const k = new Key(chars.join(''))
+                    const k = new Key(ctx.range(), chars.join(''))
                     const kv = new KeyVal(k, s)
                     ctx.end()
                     finish(kv)
@@ -215,21 +222,21 @@ function key(ctx: Context, finish: (kv: KeyVal) => void) {
             })
         } else if (reg_Space.test(c) || c === ':' || c === '=') {
             return ctx.callNoFirst(val, v => {
-                const k = new Key(chars.join(''))
+                const k = new Key(ctx.range(), chars.join(''))
                 const kv = new KeyVal(k, v)
                 ctx.end()
                 finish(kv)
             })
         } else if (c === '{') {
             return ctx.callNoFirst(block, b => {
-                const k = new Key(chars.join(''))
+                const k = new Key(ctx.range(), chars.join(''))
                 const kv = new KeyVal(k, b)
                 ctx.end()
                 finish(kv)
             })
         } else if (c === '[') {
             return ctx.callNoFirst(arr, a => {
-                const k = new Key(chars.join(''))
+                const k = new Key(ctx.range(), chars.join(''))
                 const kv = new KeyVal(k, a)
                 ctx.end()
                 finish(kv)
@@ -323,10 +330,11 @@ function str(ctx: Context, first: '"' | "'", finish: (s: Str) => void) {
 
 function keyword(ctx: Context, finish: (u: Bool | Null) => void) {
     const chars: string[] = []
+    ctx.flag()
     return (c: char) => { 
         if (c === EOF || reg_Space.test(c) || c === '"' || c === "'" || c === ':' || c === '=' || c === ',' || c === '[' || c === '{' || c === ']' || c === '}') {
             const kw = chars.join('')
-            const u = checkkeyword(kw)
+            const u = checkkeyword(kw, ctx.range())
             if (u == null) { return } //todo throw
             ctx.end()
             finish(u)
@@ -337,6 +345,6 @@ function keyword(ctx: Context, finish: (u: Bool | Null) => void) {
     }
 }
 
-function checkkeyword(kw: string) {
-    return kw === 'true' ? new Bool(true) : kw === 'false' ? new Bool(false) : kw === 'null' ? new Null : null
+function checkkeyword(kw: string, range: TkRange) {
+    return kw === 'true' ? new Bool(range, true) : kw === 'false' ? new Bool(range, false) : kw === 'null' ? new Null : null
 }

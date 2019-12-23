@@ -24,15 +24,19 @@ export class Num extends Unit {
 }
 export class Bool extends Unit {
     val: boolean
-    constructor(val: boolean) {
+    range: TkRange
+    constructor(range: TkRange, val: boolean) {
         super()
         this.val = val
+        this.range = range
     }
 }
 export class Key {
     key: string | Str
-    constructor(key: string | Str) {
+    range: TkRange
+    constructor(range: TkRange, key: string | Str) {
         this.key = key
+        this.range = range
     }
 }
 export class KeyVal {
@@ -45,16 +49,24 @@ export class KeyVal {
 }
 export class Block extends Unit {
     items: KeyVal[]
-    constructor(items: KeyVal[]) {
+    begin: TkRange
+    end: TkRange
+    constructor(begin: TkRange, end: TkRange, items: KeyVal[]) {
         super()
         this.items = items
+        this.begin = begin
+        this.end = end
     }
 }
 export class Arr extends Unit {
     items: Unit[]
-    constructor(items: Unit[]) {
+    begin: TkRange
+    end: TkRange
+    constructor(begin: TkRange, end: TkRange, items: Unit[]) {
         super()
         this.items = items
+        this.begin = begin
+        this.end = end
     }
 }
 export class Docs extends Unit {
