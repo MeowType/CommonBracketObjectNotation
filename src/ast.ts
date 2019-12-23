@@ -1,19 +1,25 @@
+import { TkRange } from "./pos"
+
 export abstract class Unit { }
 export class Null extends Unit {}
 export class Str extends Unit {
     val: string
     col: '"' | "'"
-    constructor(val: string, col: '"' | "'") {
+    range: TkRange
+    constructor(range: TkRange, val: string, col: '"' | "'") {
         super()
         this.val = val
         this.col = col
+        this.range = range
     }
 }
 export class Num extends Unit {
     val: number
-    constructor(val: number) {
+    range: TkRange
+    constructor(range: TkRange, val: number) {
         super()
         this.val = val
+        this.range = range
     }
 }
 export class Bool extends Unit {

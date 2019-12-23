@@ -1,5 +1,6 @@
 import { Unit, Block, KeyVal, Arr, Key, Num, Str, Bool, Null, Docs } from "./ast";
 import { isVoid } from "./utils";
+import { TkPos, TkRange } from "./pos";
 
 type TailParams<T extends (...a: any[]) => any> = T extends (_: any, ...a: infer L) => any ? L : never
 
@@ -17,7 +18,11 @@ const reg_Space = /\s/
 const reg_Num = /(\d|_)/
 
 class State {
+    count = 0
+    char = 0
+    line = 0
     states: BaseParserUnit[] = []
+    lines: number[] = []
     push(unit: BaseParserUnit) {
         this.states.push(unit)
     }
@@ -41,40 +46,84 @@ class State {
             }
         }
     }
+    get pos() {
+        return new TkPos(this.count, this.char, this.line)
+    }
+    get lastPos() {
+        const np = new TkPos(this.count, this.char, this.line)
+        np.count--
+        if (np.char === 0) {
+            np.line--
+            np.char = this.lines[np.line]
+        } else np.char--
+        return np
+    }
 }
 
 class Context {
     state: State
+    ended: boolean = false
+    last_flag?: TkPos
     constructor(state: State) {
         this.state = state
     }
     end() {
+        if (this.ended) return
         this.state.pop()
+        this.ended = true
     }
     call<F extends ParserUnitFn>(f: F, ...p: TailParams<F>): ParserUnit {
         return {
-            fn: f(this, ...p),
+            fn: f(new Context(this.state), ...p),
             ignoreFirst: false
         }
     }
     callNoFirst<F extends ParserUnitFn>(f: F, ...p: TailParams<F>): ParserUnit {
         return {
-            fn: f(this, ...p),
+            fn: f(new Context(this.state), ...p),
             ignoreFirst: true
         }
+    }
+    flag() {
+        this.last_flag = this.state.pos
+    }
+    range(last: boolean = false) {
+        const n = last ? this.state.lastPos : this.state.pos 
+        const r = new TkRange(this.last_flag ?? n, n)
+        this.last_flag = n
+        return r
     }
 }
 
 export function parser(code: string) {
     const state = new State
-    const ctx = new Context(state)
     let rootAst: Docs
-    state.push(root(ctx, (d) => {
+    state.push(root(new Context(state), (d) => {
         rootAst = d
     }))
+    let last: null | '\r' | '\n' = null
     for (const c of code) {
         state.call(c)
+        state.count++
+        if (c === '\n') {
+            if (last !== '\r') {
+                state.lines[state.line] = state.char
+                state.line++
+                state.char = 0
+            }
+            last = null
+        } else if (c === '\r') {
+            state.lines[state.line] = state.char
+            state.line++
+            state.char = 0
+            last = '\r'
+        } else {
+            state.char++
+            last = null
+        }
     }
+    state.count++
+    state.char++
     state.call(EOF)
     return rootAst!
 }
@@ -232,6 +281,7 @@ function num(ctx: Context, finish: (num: Num) => void) {
     const int: string[] = []
     const float: string[] = []
     let dot = false
+    ctx.flag()
     return (c: char) => { 
         if (c === EOF) {
             // todo throw
@@ -244,7 +294,7 @@ function num(ctx: Context, finish: (num: Num) => void) {
         } else {
             const n = Number(`${int.join('')}.${float.join('')}`)
             ctx.end()
-            finish(new Num(n))
+            finish(new Num(ctx.range(true), n))
             return ReDo
         }
     }
@@ -252,12 +302,13 @@ function num(ctx: Context, finish: (num: Num) => void) {
 
 function str(ctx: Context, first: '"' | "'", finish: (s: Str) => void) {
     const chars: string[] = []
+    ctx.flag()
     return (c: char) => { 
         if (c === EOF) {
             // todo throw
         } else if (c === '"' || c === "'") {
             if (c === first) {
-                const s = new Str(chars.join(''), first)
+                const s = new Str(ctx.range(), chars.join(''), first)
                 ctx.end()
                 finish(s)
             } else {
