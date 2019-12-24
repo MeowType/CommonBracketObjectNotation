@@ -15,6 +15,14 @@ interface ParserUnit {
     ignoreFirst: boolean
 }
 
+class WhenError extends Error {
+    err: Errors
+    constructor(err: Errors) {
+        super()
+        this.err = err
+    }
+}
+
 const reg_Space = /\s/
 const reg_Num = /(\d|_)/
 
@@ -25,6 +33,11 @@ class State {
     states: BaseParserUnit[] = []
     lines: number[] = []
     errors: Errors[] = []
+    show_all_err: boolean
+
+    constructor(show_all_err: boolean) {
+        this.show_all_err = show_all_err
+    }
     push(unit: BaseParserUnit) {
         this.states.push(unit)
     }
@@ -91,19 +104,26 @@ class Context {
         return new TkRange(this.last_flag ?? n, n)
     }
     error(range: TkRange, msg: string) {
+        if (!this.state.show_all_err) throw new WhenError({ range, msg })
         this.state.errors.push({ range, msg })
     }
 }
 
-export function parser(code: string) {
-    const state = new State
+export function parser(code: string, show_all_err: boolean = false) {
+    const state = new State(show_all_err)
     let rootAst: Docs
     state.push(root(new Context(state), (d) => {
         rootAst = d
     }))
     let last: null | '\r' | '\n' = null
     for (const c of code) {
-        state.call(c)
+        try {
+            state.call(c)
+        } catch (e) {
+            if (e instanceof WhenError) {
+                return [e.err]
+            } else throw e
+        }
         state.count++
         if (c === '\n') {
             if (last !== '\r') {
@@ -122,7 +142,13 @@ export function parser(code: string) {
             last = null
         }
     }
-    state.call(EOF)
+    try {
+        state.call(EOF)
+    } catch (e) {
+        if (e instanceof WhenError) {
+            return [e.err]
+        } else throw e
+    }
     if (state.errors.length !== 0) {
         return state.errors
     }
