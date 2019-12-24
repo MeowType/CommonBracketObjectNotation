@@ -1,6 +1,7 @@
 import { Unit, Block, KeyVal, Arr, Key, Num, Str, Bool, Null, Docs } from "./ast";
 import { isVoid } from "./utils";
 import { TkPos, TkRange } from "./pos";
+import { Errors } from "./type";
 
 type TailParams<T extends (...a: any[]) => any> = T extends (_: any, ...a: infer L) => any ? L : never
 
@@ -23,6 +24,7 @@ class State {
     line = 0
     states: BaseParserUnit[] = []
     lines: number[] = []
+    errors: Errors[] = []
     push(unit: BaseParserUnit) {
         this.states.push(unit)
     }
@@ -62,15 +64,12 @@ class State {
 
 class Context {
     state: State
-    ended: boolean = false
     last_flag?: TkPos
     constructor(state: State) {
         this.state = state
     }
     end() {
-        if (this.ended) return
         this.state.pop()
-        this.ended = true
     }
     call<F extends ParserUnitFn>(f: F, ...p: TailParams<F>): ParserUnit {
         return {
@@ -90,6 +89,9 @@ class Context {
     range(last: boolean = false) {
         const n = last ? this.state.lastPos : this.state.pos 
         return new TkRange(this.last_flag ?? n, n)
+    }
+    error(range: TkRange, msg: string) {
+        this.state.errors.push({ range, msg })
     }
 }
 
@@ -120,23 +122,40 @@ export function parser(code: string) {
             last = null
         }
     }
-    state.count++
-    state.char++
     state.call(EOF)
+    if (state.errors.length !== 0) {
+        return state.errors
+    }
     return rootAst!
 }
 
 function root(ctx: Context, finish: (docs: Docs) => void) {
     const items: (Block | Arr)[] = []
+    let errchar: boolean = false
     return (c: char) => {
         if (c === EOF) {
+            if (errchar) {
+                ctx.error(ctx.range(true), 'File root must have no content other than a document')
+                errchar = false
+            }
             finish(new Docs(items))
         } else if (c === '{') {
+            if (errchar) {
+                ctx.error(ctx.range(true), 'File root must have no content other than a document')
+                errchar = false
+            }
             return ctx.callNoFirst(block, b => items.push(b as any))
         } else if (c === '[') {
+            if (errchar) {
+                ctx.error(ctx.range(true), 'File root must have no content other than a document')
+                errchar = false
+            }
             return ctx.callNoFirst(arr, a => items.push(a as any))
         } else {
-            // todo throw
+            if (!errchar) {
+                ctx.flag()
+            }
+            errchar = true
         }
     }
 }
@@ -148,7 +167,8 @@ function block(ctx: Context, finish: (block: Block) => void) {
     const begin = ctx.range()
     return (c: char) => {
         if (c === EOF) {
-            //todo throw
+            ctx.flag()
+            ctx.error(ctx.range(), 'Block is not closed')
         } else if (reg_Space.test(c) || c === ',') {
             return
         } else if (c === '}') {
@@ -157,8 +177,22 @@ function block(ctx: Context, finish: (block: Block) => void) {
             ctx.end()
             finish(new Block(begin, end, items))
             return
-        } else if (c === '{' || c === '[' || c === ']' || c === ':' || c === '=') {
-            //todo throw
+        } else if (c === ':' || c === '=') {
+            ctx.flag()
+            ctx.error(ctx.range(), 'Block content must start with a key')
+        } else if (c === '[') {
+            ctx.flag()
+            ctx.error(ctx.range(), 'Block content must start with a key')
+            return ctx.callNoFirst(arr, _ => { })
+        } else if (c === '{' ) {
+            ctx.flag()
+            ctx.error(ctx.range(), 'Block content must start with a key')
+            return ctx.callNoFirst(block, _ => { })
+        } else if (c === ']') {
+            ctx.flag()
+            ctx.error(ctx.range(), 'Block is not closed')
+            ctx.end()
+            return ReDo
         } else {
             return ctx.call(key, kv => {
                 items.push(kv)
@@ -172,8 +206,12 @@ function arr(ctx: Context, finish: (block: Arr) => void) {
     ctx.flag()
     const begin = ctx.range()
     return (c: char) => { 
-        if (c === EOF || c === ':' || c === '=') {
-            //todo throw
+        if (c === EOF) {
+            ctx.flag()
+            ctx.error(ctx.range(), 'Array is not closed')
+        } else if (c === ':' || c === '=') {
+            ctx.flag()
+            ctx.error(ctx.range(), 'Array cant have key')
         } else if (reg_Space.test(c) || c === ',') {
             return
         } else if (c === ']') {
@@ -200,7 +238,8 @@ function key(ctx: Context, finish: (kv: KeyVal) => void) {
     ctx.flag()
     return (c: char) => {
         if (c === EOF) {
-            // todo throw
+            ctx.flag()
+            ctx.error(ctx.range(), 'There should be a key value here')
         } else if (s != null) {
             return ctx.call(val, v => {
                 const k = new Key(ctx.range(), s!)
@@ -221,6 +260,9 @@ function key(ctx: Context, finish: (kv: KeyVal) => void) {
                 s = s
             })
         } else if (reg_Space.test(c) || c === ':' || c === '=') {
+            if (chars.length === 0) {
+                ctx.error(ctx.range(), 'No key here')
+            }
             return ctx.callNoFirst(val, v => {
                 const k = new Key(ctx.range(), chars.join(''))
                 const kv = new KeyVal(k, v)
@@ -228,6 +270,9 @@ function key(ctx: Context, finish: (kv: KeyVal) => void) {
                 finish(kv)
             })
         } else if (c === '{') {
+            if (chars.length === 0) {
+                ctx.error(ctx.range(), 'No key here')
+            }
             return ctx.callNoFirst(block, b => {
                 const k = new Key(ctx.range(), chars.join(''))
                 const kv = new KeyVal(k, b)
@@ -235,12 +280,20 @@ function key(ctx: Context, finish: (kv: KeyVal) => void) {
                 finish(kv)
             })
         } else if (c === '[') {
+            if (chars.length === 0) {
+                ctx.error(ctx.range(), 'No key here')
+            }
             return ctx.callNoFirst(arr, a => {
                 const k = new Key(ctx.range(), chars.join(''))
                 const kv = new KeyVal(k, a)
                 ctx.end()
                 finish(kv)
             })
+        } else if (c === ',') {
+            ctx.flag()
+            ctx.error(ctx.range(), 'There should be a value here')
+            ctx.end()
+            return ReDo
         } else {
             chars.push(c)
         }
@@ -250,11 +303,16 @@ function key(ctx: Context, finish: (kv: KeyVal) => void) {
 function val(ctx: Context, finish: (unit: Unit) => void) {
     return (c: char) => {
         if (c === EOF) {
-            // todo throw
+            ctx.flag()
+            ctx.error(ctx.range(), 'There should be a value here')
         } else if (reg_Space.test(c)) {
             return
-        } else if (c === ',' || c === ':' || c === '=' || c === ',' || c === ']' || c === '}') {
-            //todo throw
+        } else if (c === ',' || c === ':' || c === '=' || c === ']' || c === '}') {
+            ctx.flag()
+            ctx.error(ctx.range(), 'There should be a value here')
+            ctx.end()
+            finish(null as any)
+            return ReDo
         } else if (reg_Num.test(c)) {
             return ctx.call(num, n => {
                 ctx.end()
@@ -291,9 +349,13 @@ function num(ctx: Context, finish: (num: Num) => void) {
     ctx.flag()
     return (c: char) => { 
         if (c === EOF) {
-            // todo throw
+            const n = Number(`${int.join('')}.${float.join('')}`)
+            finish(new Num(ctx.range(true), n))
         } else if (c === '.') {
-            if(dot) {} //todo throw
+            if (dot) {
+                ctx.flag()
+                ctx.error(ctx.range(), 'Number cannot be dot twice')
+            }
             dot = true
         } else if (reg_Num.test(c)) {
             if (dot) float.push(c)
@@ -312,7 +374,8 @@ function str(ctx: Context, first: '"' | "'", finish: (s: Str) => void) {
     ctx.flag()
     return (c: char) => { 
         if (c === EOF) {
-            // todo throw
+            ctx.flag()
+            ctx.error(ctx.range(), 'String is not closed')
         } else if (c === '"' || c === "'") {
             if (c === first) {
                 const s = new Str(ctx.range(), chars.join(''), first)
@@ -332,12 +395,21 @@ function keyword(ctx: Context, finish: (u: Bool | Null) => void) {
     const chars: string[] = []
     ctx.flag()
     return (c: char) => { 
-        if (c === EOF || reg_Space.test(c) || c === '"' || c === "'" || c === ':' || c === '=' || c === ',' || c === '[' || c === '{' || c === ']' || c === '}') {
+        if (c === EOF) {
             const kw = chars.join('')
             const u = checkkeyword(kw, ctx.range())
-            if (u == null) { return } //todo throw
+            if (u == null) {
+                ctx.error(ctx.range(), 'Unknown keyword')
+            }
+            finish(u!)
+        } else if (reg_Space.test(c) || c === '"' || c === "'" || c === ':' || c === '=' || c === ',' || c === '[' || c === '{' || c === ']' || c === '}') {
+            const kw = chars.join('')
+            const u = checkkeyword(kw, ctx.range())
+            if (u == null) {
+                ctx.error(ctx.range(), 'Unknown keyword')
+            } 
             ctx.end()
-            finish(u)
+            finish(u!)
             return ReDo
         } else {
             chars.push(c)
