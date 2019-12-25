@@ -1,19 +1,16 @@
 import { State, Context, ReDo, WhenError } from "./state_machine"
-import { Tokens, TEOF, TStr, TSymbol, TNum, TWord } from "./token"
+import { Tokens, TEOF, TStr, TSymbol, TWord } from "./token"
 import { Errors } from "./type"
+import { TkRange } from "./pos"
 
 const EOF = Symbol('EOF')
 type char = string | typeof EOF
 type Ctx = Context<char>
 
 const reg_Space = /\s/
-const reg_Num = /(\d|_)/
 
 export function tokenizer(code: string, show_all_err: boolean = false): {
-    type: 'errors'
-    val: Errors[]
-} | {
-    type: 'tokens'
+    err?: Errors[],
     val: Tokens[]
 } {
     const state = new State<char>(show_all_err)
@@ -28,8 +25,8 @@ export function tokenizer(code: string, show_all_err: boolean = false): {
         } catch (e) {
             if (e instanceof WhenError) {
                 return {
-                    type: 'errors',
-                    val: [e.err]
+                    err: [e.err],
+                    val: tokens
                 }
             } else throw e
         }
@@ -56,20 +53,19 @@ export function tokenizer(code: string, show_all_err: boolean = false): {
     } catch (e) {
         if (e instanceof WhenError) {
             return {
-                type: 'errors',
-                val: [e.err]
+                err: [e.err],
+                val: tokens
             }
         } else throw e
     }
     if (state.errors.length !== 0) {
         return {
-            type: 'errors',
-            val: state.errors
+            err: state.errors,
+            val: tokens
         }
     }
-    tokens.push(new TEOF)
+    tokens.push(new TEOF(new TkRange(state.pos, state.pos)))
     return {
-        type: 'tokens',
         val: tokens
     }
 }
@@ -80,8 +76,6 @@ function root(ctx: Ctx, push: (t: Tokens) => void) {
             ctx.end() 
         } else if (reg_Space.test(c)) {
             return
-        } else if (reg_Num.test(c)) {
-            return ctx.call(num, push)
         } else if (c === ',' || c === ':' || c === '=' || c === '[' || c === ']' || c === '{' || c === '}') {
             ctx.flag()
             push(new TSymbol(ctx.range(), c))
@@ -112,35 +106,6 @@ function str(ctx: Ctx, first: '"' | "'", push: (t: TStr) => void) {
         } else {
             //todo escape
             chars.push(c)
-        }
-    }
-}
-
-function num(ctx: Ctx, push: (t: TNum) => void) {
-    const int: string[] = []
-    const float: string[] = []
-    let dot = false
-    ctx.flag()
-    return (c: char) => {
-        if (c === EOF || reg_Space.test(c)) {
-            const n = Number(`${int.join('')}.${float.join('')}`)
-            ctx.end()
-            push(new TNum(ctx.range(true), n))
-            return ReDo
-        } else if (c === '.') {
-            if (dot) {
-                ctx.flag()
-                ctx.error(ctx.range(), 'Number cannot be dot twice')
-            }
-            dot = true
-        } else if (reg_Num.test(c)) {
-            if (dot) float.push(c)
-            else int.push(c)
-        } else {
-            const n = Number(`${int.join('')}.${float.join('')}`)
-            ctx.end()
-            push(new TNum(ctx.range(true), n))
-            return ReDo
         }
     }
 }

@@ -41,11 +41,6 @@ export class State<Char> {
     }
     call(c: Char): void {
         const r = this.states[this.states.length - 1](c)
-        // if (c === EOF && this.states.length > 1) {
-        //     this.pop()
-        //     this.call(c)
-        //     return
-        // }
         if (!isVoid(r)) {
             if (r === ReDo) {
                 this.call(c)

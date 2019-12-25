@@ -1,7 +1,13 @@
 import { TkRange } from "./pos"
 
 export abstract class Token { }
-export class TEOF extends Token { }
+export class TEOF extends Token { 
+    range: TkRange
+    constructor(range: TkRange) {
+        super()
+        this.range = range
+    }
+}
 export abstract class TComment extends Token { }
 export class TLineComment extends TComment {
     items: (string | Comment)[]
@@ -41,15 +47,6 @@ export class TStr extends Token {
         this.range = range
     }
 }
-export class TNum extends Token {
-    val: number
-    range: TkRange
-    constructor(range: TkRange, val: number) {
-        super()
-        this.val = val
-        this.range = range
-    }
-}
 export class TSymbol extends Token {
     val: ',' | ':' | '=' | '[' | ']' | '{' | '}'
     range: TkRange
@@ -60,4 +57,4 @@ export class TSymbol extends Token {
     }
 }
 
-export type Tokens = TEOF | TLineComment | TBlockComment | TWord | TStr | TNum | TSymbol
+export type Tokens = TEOF | TLineComment | TBlockComment | TWord | TStr | TSymbol
