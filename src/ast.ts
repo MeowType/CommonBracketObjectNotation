@@ -36,9 +36,9 @@ export class Null extends Unit {
 }
 export class Str extends Unit {
     val: string
-    col: '"' | "'"
+    col: '"' | "'" | null
     range: TkRange
-    constructor(range: TkRange, val: string, col: '"' | "'") {
+    constructor(range: TkRange, val: string, col: '"' | "'" | null) {
         super()
         this.val = val
         this.col = col

@@ -34,7 +34,7 @@ function root(ctx: Ctx, finish: (docs: Docs) => void) {
         } else if (t instanceof TSymbol && t.val === '{') {
             return ctx.callNoFirst(block, t, b => items.push(b))
         } else if (t instanceof TSymbol && t.val === '[') {
-
+            return ctx.callNoFirst(arr, t, a => items.push(a))
         } else {
             ctx.error(t.range, 'File root must have no content other than a document')
         }
@@ -70,6 +70,30 @@ function block(ctx: Ctx, begin: TSymbol, finish: (block: Block) => void) {
     }
 }
 
+function arr(ctx: Ctx, begin: TSymbol, finish: (arr: Arr) => void) {
+    const items: Unit[] = []
+    return (t: Tokens) => {
+        if (t instanceof TEOF) {
+            ctx.error(t.range, 'Array is not closed')
+            ctx.end()
+            finish(new Arr(begin.range, t.range, items))
+            return ReDo
+        } else if (t instanceof TSymbol && t.val === ',') {
+            items.push(new Comma(t.range))
+        } else if (t instanceof TSymbol && t.val === ']') {
+            ctx.end()
+            finish(new Arr(begin.range, t.range, items))
+        } else if (t instanceof TSymbol && t.val === '}') {
+            ctx.error(t.range, 'Array is not closed')
+            ctx.end()
+            finish(new Arr(begin.range, t.range, items))
+            return ReDo
+        } else {
+            return ctx.call(val, u => items.push(u))
+        }
+    }
+}
+
 function key(ctx: Ctx, k: TStr | TWord, finish: (kv: KeyVal) => void) {
     return (t: Tokens) => {
         if (t instanceof TEOF) {
@@ -81,9 +105,15 @@ function key(ctx: Ctx, k: TStr | TWord, finish: (kv: KeyVal) => void) {
             ctx.end()
             return ReDo
         } else if (t instanceof TSymbol && (t.val === ':' || t.val === '=')) {
-            ctx.callNoFirst(val, u => {
+            return ctx.callNoFirst(val, u => {
                 const sp = new Split(t.range, t.val as any)
                 const kv = new KeyVal(new Key(k.range, k instanceof TStr ? new Str(k.range, k.val, k.col) : k.val), u, sp)
+                ctx.end()
+                finish(kv)
+            })
+        } else {
+            return ctx.call(val, u => {
+                const kv = new KeyVal(new Key(k.range, k instanceof TStr ? new Str(k.range, k.val, k.col) : k.val), u)
                 ctx.end()
                 finish(kv)
             })
@@ -100,6 +130,48 @@ function val(ctx: Ctx, finish: (u: Unit) => void) {
         } else if (t instanceof TStr) {
             ctx.end()
             finish(new Str(t.range, t.val, t.col))
+        } else if (t instanceof TWord) {
+            return ctx.call(word, t, u => {
+                ctx.end()
+                finish(u)
+            })
+        } else if (t instanceof TSymbol && (t.val === ',' || t.val === ':' || t.val === '=' || t.val === ']' || t.val === '}' )) {
+            ctx.error(t.range, 'There should be a key value here')
+            ctx.end()
+            return ReDo
+        } else if (t instanceof TSymbol && t.val === '{') {
+            return ctx.callNoFirst(block, t, b => {
+                ctx.end()
+                finish(b)
+            })
+        } else if (t instanceof TSymbol && t.val === '[') {
+            return ctx.callNoFirst(arr, t, a => {
+                ctx.end()
+                finish(a)
+            })
+        } else {
+            t
+            //todo
+            ctx.end()
+        }
+    }
+}
+
+const reg_Num = /(0x[\da-fA-F_]+)|(([\-]?([\d\_])+)\.([\-]?([\d\_])+([eE]([\-]?)\d+)?))|(([\-]?([\d\_])+)\.([eE]([\-]?)\d+)?)|([\-]?\.(([\d\_])+([eE]([\-]?)\d+)?))|(([\-]?([\d\_])+([eE]([\-]?)\d+)?))/gi
+
+function word(ctx: Ctx, w: TWord, finish: (u: Bool | Num | Str | Null) => void) {
+    return (t: Tokens) => { 
+        ctx.end()
+        if (w.val === 'true') {
+            finish(new Bool(w.range, true))
+        } else if (w.val === 'false') {
+            finish(new Bool(w.range, false))
+        } else if (w.val === 'null') {
+            finish(new Null(w.range))
+        } else if (reg_Num.test(w.val)) {
+            finish(new Num(w.range, Number(w.val.replace('_', ''))))
+        } else {
+            finish(new Str(w.range, w.val, null))
         }
     }
 }
