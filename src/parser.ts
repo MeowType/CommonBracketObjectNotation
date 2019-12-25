@@ -104,16 +104,16 @@ function key(ctx: Ctx, k: TStr | TWord, finish: (kv: KeyVal) => void) {
             ctx.end()
             return ReDo
         } else if (t instanceof TSSplit) {
+            ctx.end()
             return ctx.callNoFirst(val, u => {
                 const sp = new Split(t.range, t.val as any)
                 const kv = new KeyVal(new Key(k.range, k instanceof TStr ? new Str(k.range, k.val, k.col) : k.val), u, sp)
-                ctx.end()
                 finish(kv)
             })
         } else {
+            ctx.end()
             return ctx.call(val, u => {
                 const kv = new KeyVal(new Key(k.range, k instanceof TStr ? new Str(k.range, k.val, k.col) : k.val), u)
-                ctx.end()
                 finish(kv)
             })
         }
@@ -123,29 +123,29 @@ function key(ctx: Ctx, k: TStr | TWord, finish: (kv: KeyVal) => void) {
 function val(ctx: Ctx, finish: (u: Unit) => void) {
     return (t: Tokens) => { 
         if (t instanceof TEOF) {
-            ctx.error(t.range, 'There should be a key value here')
+            ctx.error(t.range, 'There should be a value here')
             ctx.end()
             return ReDo
         } else if (t instanceof TStr) {
             ctx.end()
             finish(new Str(t.range, t.val, t.col))
         } else if (t instanceof TWord) {
+            ctx.end()
             return ctx.call(word, t, u => {
-                ctx.end()
                 finish(u)
             })
         } else if (t instanceof TSComma || t instanceof TSSplit || t instanceof TSArrEnd || t instanceof TSObjEnd) {
-            ctx.error(t.range, 'There should be a key value here')
+            ctx.error(t.range, 'There should be a value here')
             ctx.end()
             return ReDo
         } else if (t instanceof TSObjStart) {
+            ctx.end()
             return ctx.callNoFirst(block, t, b => {
-                ctx.end()
                 finish(b)
             })
         } else if (t instanceof TSArrStart) {
+            ctx.end()
             return ctx.callNoFirst(arr, t, a => {
-                ctx.end()
                 finish(a)
             })
         } else {
