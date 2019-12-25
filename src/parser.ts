@@ -1,7 +1,7 @@
 import { Unit, Block, KeyVal, Arr, Key, Num, Str, Bool, Null, Docs, Comma, Split } from "./ast";
 import { TkRange } from "./pos";
 import { State, Context, WhenError, ReDo } from "./state_machine";
-import { Tokens, TEOF, TSymbol, TStr, TWord } from "./token";
+import { Tokens, TEOF, TStr, TWord, TSObjStart, TSArrStart, TSComma, TSObjEnd, TSArrEnd, TSSplit } from "./token";
 
 type Ctx = Context<Tokens>
 
@@ -31,9 +31,9 @@ function root(ctx: Ctx, finish: (docs: Docs) => void) {
     return (t: Tokens) => {
         if (t instanceof TEOF) {
             finish(new Docs(items))
-        } else if (t instanceof TSymbol && t.val === '{') {
+        } else if (t instanceof TSObjStart) {
             return ctx.callNoFirst(block, t, b => items.push(b))
-        } else if (t instanceof TSymbol && t.val === '[') {
+        } else if (t instanceof TSArrStart) {
             return ctx.callNoFirst(arr, t, a => items.push(a))
         } else {
             ctx.error(t.range, 'File root must have no content other than a document')
@@ -41,7 +41,7 @@ function root(ctx: Ctx, finish: (docs: Docs) => void) {
     }
 }
 
-function block(ctx: Ctx, begin: TSymbol, finish: (block: Block) => void) {
+function block(ctx: Ctx, begin: TSObjStart, finish: (block: Block) => void) {
     const items: (KeyVal | Comma)[] = []
     return (t: Tokens) => { 
         if (t instanceof TEOF) {
@@ -49,28 +49,28 @@ function block(ctx: Ctx, begin: TSymbol, finish: (block: Block) => void) {
             ctx.end()
             finish(new Block(begin.range, t.range, items))
             return ReDo
-        } else if (t instanceof TSymbol && t.val === ',') {
+        } else if (t instanceof TSComma) {
             items.push(new Comma(t.range))
-        } else if (t instanceof TSymbol && t.val === '}') {
+        } else if (t instanceof TSObjEnd) {
             ctx.end()
             finish(new Block(begin.range, t.range, items))
-        } else if (t instanceof TSymbol && t.val === '{') {
+        } else if (t instanceof TSObjStart) {
             ctx.error(t.range, 'Block content must start with a key')
             return ctx.callNoFirst(block, t, _ => {})
+        } else if (t instanceof TSArrStart) {
+            ctx.error(t.range, 'Block content must start with a key')
+            return ctx.callNoFirst(arr, t, _ => { })
         } else if (t instanceof TStr || t instanceof TWord ) {
             return ctx.callNoFirst(key, t, kv => items.push(kv))
-        } else if (t instanceof TSymbol && t.val === ']') {
-            ctx.error(t.range, 'Block is not closed')
-            ctx.end()
-            finish(new Block(begin.range, t.range, items))
-            return ReDo
+        } else if (t instanceof TSArrEnd) {
+            ctx.error(t.range, 'No Array here')
         } else {
             ctx.error(t.range, 'Block content must start with a key')
         }
     }
 }
 
-function arr(ctx: Ctx, begin: TSymbol, finish: (arr: Arr) => void) {
+function arr(ctx: Ctx, begin: TSArrStart, finish: (arr: Arr) => void) {
     const items: Unit[] = []
     return (t: Tokens) => {
         if (t instanceof TEOF) {
@@ -78,16 +78,15 @@ function arr(ctx: Ctx, begin: TSymbol, finish: (arr: Arr) => void) {
             ctx.end()
             finish(new Arr(begin.range, t.range, items))
             return ReDo
-        } else if (t instanceof TSymbol && t.val === ',') {
+        } else if (t instanceof TSComma) {
             items.push(new Comma(t.range))
-        } else if (t instanceof TSymbol && t.val === ']') {
+        } else if (t instanceof TSArrEnd) {
             ctx.end()
             finish(new Arr(begin.range, t.range, items))
-        } else if (t instanceof TSymbol && t.val === '}') {
-            ctx.error(t.range, 'Array is not closed')
-            ctx.end()
-            finish(new Arr(begin.range, t.range, items))
-            return ReDo
+        } else if (t instanceof TSObjEnd) {
+            ctx.error(t.range, 'No Block here')
+        } else if (t instanceof TSSplit) {
+            ctx.error(t.range, 'Array cant have key')
         } else {
             return ctx.call(val, u => items.push(u))
         }
@@ -100,11 +99,11 @@ function key(ctx: Ctx, k: TStr | TWord, finish: (kv: KeyVal) => void) {
             ctx.error(t.range, 'There should be a key value here')
             ctx.end()
             return ReDo
-        } else if (t instanceof TSymbol && t.val === ',') {
+        } else if (t instanceof TSComma) {
             ctx.error(t.range, 'There should be a key value here')
             ctx.end()
             return ReDo
-        } else if (t instanceof TSymbol && (t.val === ':' || t.val === '=')) {
+        } else if (t instanceof TSSplit) {
             return ctx.callNoFirst(val, u => {
                 const sp = new Split(t.range, t.val as any)
                 const kv = new KeyVal(new Key(k.range, k instanceof TStr ? new Str(k.range, k.val, k.col) : k.val), u, sp)
@@ -135,16 +134,16 @@ function val(ctx: Ctx, finish: (u: Unit) => void) {
                 ctx.end()
                 finish(u)
             })
-        } else if (t instanceof TSymbol && (t.val === ',' || t.val === ':' || t.val === '=' || t.val === ']' || t.val === '}' )) {
+        } else if (t instanceof TSComma || t instanceof TSSplit || t instanceof TSArrEnd || t instanceof TSObjEnd) {
             ctx.error(t.range, 'There should be a key value here')
             ctx.end()
             return ReDo
-        } else if (t instanceof TSymbol && t.val === '{') {
+        } else if (t instanceof TSObjStart) {
             return ctx.callNoFirst(block, t, b => {
                 ctx.end()
                 finish(b)
             })
-        } else if (t instanceof TSymbol && t.val === '[') {
+        } else if (t instanceof TSArrStart) {
             return ctx.callNoFirst(arr, t, a => {
                 ctx.end()
                 finish(a)

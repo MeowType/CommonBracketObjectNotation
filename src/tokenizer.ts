@@ -1,5 +1,5 @@
 import { State, Context, ReDo, WhenError } from "./state_machine"
-import { Tokens, TEOF, TStr, TSymbol, TWord } from "./token"
+import { Tokens, TEOF, TStr, TWord, makeTSymbol } from "./token"
 import { Errors } from "./type"
 import { TkRange } from "./pos"
 
@@ -78,7 +78,7 @@ function root(ctx: Ctx, push: (t: Tokens) => void) {
             return
         } else if (c === ',' || c === ':' || c === '=' || c === '[' || c === ']' || c === '{' || c === '}') {
             ctx.flag()
-            push(new TSymbol(ctx.range(), c))
+            push(makeTSymbol(ctx.range(), c))
         } else if (c === '"' || c === "'") {
             return ctx.callNoFirst(str, c, push)
         } else {

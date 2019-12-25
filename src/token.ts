@@ -47,14 +47,39 @@ export class TStr extends Token {
         this.range = range
     }
 }
-export class TSymbol extends Token {
-    val: ',' | ':' | '=' | '[' | ']' | '{' | '}'
+export abstract class TSymbol<S extends ',' | ':' | '=' | '[' | ']' | '{' | '}'> extends Token {
+    val: S
     range: TkRange
-    constructor(range: TkRange, val: ',' | ':' | '=' | '[' | ']' | '{' | '}') {
+    constructor(range: TkRange, val: S) {
         super()
         this.val = val
         this.range = range
     }
 }
+export class TSComma extends TSymbol<','> { }
+export class TSSplit extends TSymbol<':' | '='> { }
+export class TSArrStart extends TSymbol<'['> { }
+export class TSArrEnd extends TSymbol<']'> { }
+export class TSObjStart extends TSymbol<'{'> { }
+export class TSObjEnd extends TSymbol<'}'> { }
 
-export type Tokens = TEOF | TLineComment | TBlockComment | TWord | TStr | TSymbol
+export function makeTSymbol(range: TkRange, val: ','): TSComma
+export function makeTSymbol(range: TkRange, val: ':' | '='): TSSplit
+export function makeTSymbol(range: TkRange, val: '['): TSArrStart
+export function makeTSymbol(range: TkRange, val: ']'): TSArrEnd
+export function makeTSymbol(range: TkRange, val: '{'): TSObjStart
+export function makeTSymbol(range: TkRange, val: '{'): TSObjEnd
+export function makeTSymbol(range: TkRange, val: ',' | ':' | '=' | '[' | ']' | '{' | '}'): TSComma | TSSplit | TSArrStart | TSArrEnd | TSObjStart | TSObjEnd
+export function makeTSymbol(range: TkRange, val: ',' | ':' | '=' | '[' | ']' | '{' | '}') {
+    switch (val) {
+        case ',': return new TSComma(range, val)
+        case ':': case '=': return new TSSplit(range, val)
+        case '[': return new TSArrStart(range, val)
+        case ']': return new TSArrEnd(range, val)
+        case '{': return new TSObjStart(range, val)
+        case '}': return new TSObjEnd(range, val)
+    }
+}
+
+
+export type Tokens = TEOF | TLineComment | TBlockComment | TWord | TStr | TSComma | TSSplit | TSArrStart | TSArrEnd | TSObjStart | TSObjEnd
