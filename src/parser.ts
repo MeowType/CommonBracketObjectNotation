@@ -1,4 +1,4 @@
-import { Unit, Block, KeyVal, Arr, Key, Num, Str, Bool, Null, Docs } from "./ast";
+import { Unit, Block, KeyVal, Arr, Key, Num, Str, Bool, Null, Docs, Comma, Split } from "./ast";
 import { isVoid } from "./utils";
 import { TkPos, TkRange } from "./pos";
 import { Errors } from "./type";
@@ -186,9 +186,12 @@ function root(ctx: Context, finish: (docs: Docs) => void) {
     }
 }
 
+function line_comment() {
+
+}
 
 function block(ctx: Context, finish: (block: Block) => void) {
-    const items: KeyVal[] = []
+    const items: (KeyVal | Comma)[] = []
     ctx.flag()
     const begin = ctx.range()
     return (c: char) => {
@@ -196,6 +199,8 @@ function block(ctx: Context, finish: (block: Block) => void) {
             ctx.flag()
             ctx.error(ctx.range(), 'Block is not closed')
         } else if (reg_Space.test(c) || c === ',') {
+            ctx.flag()
+            items.push(new Comma(ctx.range()))
             return
         } else if (c === '}') {
             ctx.flag()
@@ -239,6 +244,8 @@ function arr(ctx: Context, finish: (block: Arr) => void) {
             ctx.flag()
             ctx.error(ctx.range(), 'Array cant have key')
         } else if (reg_Space.test(c) || c === ',') {
+            ctx.flag()
+            items.push(new Comma(ctx.range()))
             return
         } else if (c === ']') {
             ctx.flag()
@@ -260,6 +267,8 @@ function arr(ctx: Context, finish: (block: Arr) => void) {
 
 function key(ctx: Context, finish: (kv: KeyVal) => void) {
     const chars: string[] = []
+    let charsEnd = false
+    let charsRange: TkRange | null = null
     let s: Str | null = null
     ctx.flag()
     return (c: char) => {
@@ -285,17 +294,47 @@ function key(ctx: Context, finish: (kv: KeyVal) => void) {
             return ctx.callNoFirst(str, c, s => {
                 s = s
             })
-        } else if (reg_Space.test(c) || c === ':' || c === '=') {
+        } else if (reg_Space.test(c)) {
             if (chars.length === 0) {
                 ctx.error(ctx.range(), 'No key here')
             }
+            if (!charsEnd) {
+                charsEnd = true
+                charsRange = ctx.range(true)
+            }
+            return
+        } else if (c === ':' || c === '=') {
+            if (charsEnd) { 
+                ctx.flag()
+                const sp = new Split(ctx.range(), c)
+                return ctx.callNoFirst(val, v => {
+                    const k = new Key(charsRange!, chars.join(''))
+                    const kv = new KeyVal(k, v, sp)
+                    ctx.end()
+                    finish(kv)
+                })
+            }
+            if (chars.length === 0) {
+                ctx.error(ctx.range(), 'No key here')
+            }
+            const key_range = ctx.range(true)
+            ctx.flag()
+            const sp = new Split(ctx.range(), c)
             return ctx.callNoFirst(val, v => {
-                const k = new Key(ctx.range(), chars.join(''))
-                const kv = new KeyVal(k, v)
+                const k = new Key(key_range, chars.join(''))
+                const kv = new KeyVal(k, v, sp)
                 ctx.end()
                 finish(kv)
             })
         } else if (c === '{') {
+            if (charsEnd) {
+                return ctx.callNoFirst(block, b => {
+                    const k = new Key(charsRange!, chars.join(''))
+                    const kv = new KeyVal(k, b)
+                    ctx.end()
+                    finish(kv)
+                })
+            }
             if (chars.length === 0) {
                 ctx.error(ctx.range(), 'No key here')
             }
@@ -306,6 +345,14 @@ function key(ctx: Context, finish: (kv: KeyVal) => void) {
                 finish(kv)
             })
         } else if (c === '[') {
+            if (charsEnd) { 
+                return ctx.callNoFirst(arr, a => {
+                    const k = new Key(charsRange!, chars.join(''))
+                    const kv = new KeyVal(k, a)
+                    ctx.end()
+                    finish(kv)
+                })
+            }
             if (chars.length === 0) {
                 ctx.error(ctx.range(), 'No key here')
             }
@@ -321,7 +368,14 @@ function key(ctx: Context, finish: (kv: KeyVal) => void) {
             ctx.end()
             return ReDo
         } else {
-            chars.push(c)
+            if (charsEnd) {
+                return ctx.callNoFirst(val, v => {
+                    const k = new Key(charsRange!, chars.join(''))
+                    const kv = new KeyVal(k, v)
+                    ctx.end()
+                    finish(kv)
+                })
+            } else chars.push(c)
         }
     }
 }
@@ -444,5 +498,5 @@ function keyword(ctx: Context, finish: (u: Bool | Null) => void) {
 }
 
 function checkkeyword(kw: string, range: TkRange) {
-    return kw === 'true' ? new Bool(range, true) : kw === 'false' ? new Bool(range, false) : kw === 'null' ? new Null : null
+    return kw === 'true' ? new Bool(range, true) : kw === 'false' ? new Bool(range, false) : kw === 'null' ? new Null(range) : null
 }

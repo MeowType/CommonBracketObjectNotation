@@ -1,4 +1,4 @@
-import { Docs, Block, Arr, Unit, Key, Str, Num, Bool, Null } from "./ast";
+import { Docs, Block, Arr, Unit, Key, Str, Num, Bool, Null, Comma } from "./ast";
 import { CbonVal, CbonObj, CbonArr } from "./type";
 
 export function toJsObj(doc: Docs) {
@@ -8,13 +8,14 @@ export function toJsObj(doc: Docs) {
     })
 }
 
-export function unit(u: Unit): CbonVal {
+export function unit(u: Unit): CbonVal | undefined {
     if (u instanceof Block) return block(u)
     else if (u instanceof Arr) return arr(u)
     else if (u instanceof Num) return u.val
     else if (u instanceof Str) return u.val
     else if (u instanceof Bool) return u.val
-    else return null
+    else if (u instanceof Null) return null
+    else return undefined
 }
 
 function key(k: Key) {
@@ -22,9 +23,18 @@ function key(k: Key) {
 }
 
 export function block(b: Block): CbonObj {
-    return Object.fromEntries(b.items.map(kv => [key(kv.key), unit(kv.val)]))
+    return Object.fromEntries(b.items.flatMap(kv => {
+        if (kv instanceof Comma) return []
+        const v = unit(kv.val)
+        if (v === undefined) return []
+        return [[key(kv.key), v]]
+    }))
 }
 
 export function arr(a: Arr): CbonArr {
-    return a.items.map(u => unit(u))
+    return a.items.flatMap(u => {
+        const v = unit(u)
+        if (v === undefined) return []
+        return [v]
+    })
 }

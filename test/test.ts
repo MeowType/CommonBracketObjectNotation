@@ -1,5 +1,5 @@
 import { parser } from '../src/index'
 
-const r = parser(`1{1,a:,[a:1,a`)
+const r = parser(`{a :1}`)
 
 console.log(JSON.stringify(r))

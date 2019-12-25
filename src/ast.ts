@@ -1,7 +1,39 @@
 import { TkRange } from "./pos"
 
 export abstract class Unit { }
-export class Null extends Unit {}
+export abstract class Comment extends Unit { }
+export class LineComment extends Comment {
+    items: (string | Comment)[]
+    range: TkRange
+    constructor(range: TkRange, items: (string | Comment)[]) {
+        super()
+        this.items = items
+        this.range = range
+    }
+}
+export class BlockComment extends Comment {
+    items: (string | Comment)[]
+    range: TkRange
+    constructor(range: TkRange, items: (string | Comment)[]) {
+        super()
+        this.items = items
+        this.range = range
+    }
+}
+export class Comma extends Unit {
+    range: TkRange
+    constructor(range: TkRange) {
+        super()
+        this.range = range
+    }
+}
+export class Null extends Unit {
+    range: TkRange
+    constructor(range: TkRange) {
+        super()
+        this.range = range
+    }
+}
 export class Str extends Unit {
     val: string
     col: '"' | "'"
@@ -39,19 +71,29 @@ export class Key {
         this.range = range
     }
 }
+export class Split {
+    type: ':' | '='
+    range: TkRange
+    constructor(range: TkRange, type: ':' | '=') {
+        this.type = type
+        this.range = range
+    }
+}
 export class KeyVal {
     key: Key
     val: Unit
-    constructor(key: Key, val: Unit) {
+    split?: Split
+    constructor(key: Key, val: Unit, split?: Split) {
         this.key = key
         this.val = val
+        this.split = split
     }
 }
 export class Block extends Unit {
-    items: KeyVal[]
+    items: (KeyVal | Comma)[]
     begin: TkRange
     end: TkRange
-    constructor(begin: TkRange, end: TkRange, items: KeyVal[]) {
+    constructor(begin: TkRange, end: TkRange, items: (KeyVal | Comma)[]) {
         super()
         this.items = items
         this.begin = begin
