@@ -37,4 +37,5 @@ key     = word | string;
 value   = object | array | string | word | number | 'null' | 'true' | 'false' ;
 string  = ("'" anychar "'") | ('"' anychar '"');
 word    = any_not_symbol;
+number  = /(0x[\da-fA-F_]+)|(([\-]?([\d\_])+)\.([\-]?([\d\_])+([eE]([\-]?)\d+)?))|(([\-]?([\d\_])+)\.([eE]([\-]?)\d+)?)|([\-]?\.(([\d\_])+([eE]([\-]?)\d+)?))|(([\-]?([\d\_])+([eE]([\-]?)\d+)?))/
 ```
