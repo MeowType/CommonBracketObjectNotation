@@ -156,7 +156,7 @@ function val(ctx: Ctx, finish: (u: Unit) => void) {
     }
 }
 
-const reg_Num = /(0x[\da-fA-F_]+)|(([\-]?([\d\_])+)\.([\-]?([\d\_])+([eE]([\-]?)\d+)?))|(([\-]?([\d\_])+)\.([eE]([\-]?)\d+)?)|([\-]?\.(([\d\_])+([eE]([\-]?)\d+)?))|(([\-]?([\d\_])+([eE]([\-]?)\d+)?))/gi
+const reg_Num = /(0x[\da-fA-F_]+)|(([\-]?([\d\_])+)\.([\-]?([\d\_])+([eE]([\-]?)\d+)?))|(([\-]?([\d\_])+)\.([eE]([\-]?)\d+)?)|([\-]?\.(([\d\_])+([eE]([\-]?)\d+)?))|(([\-]?([\d\_])+([eE]([\-]?)\d+)?))/i
 
 function word(ctx: Ctx, w: TWord, finish: (u: Bool | Num | Str | Null) => void) {
     return (t: Tokens) => { 
