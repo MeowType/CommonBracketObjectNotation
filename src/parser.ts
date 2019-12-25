@@ -1,116 +1,17 @@
 import { Unit, Block, KeyVal, Arr, Key, Num, Str, Bool, Null, Docs, Comma, Split } from "./ast";
-import { isVoid } from "./utils";
-import { TkPos, TkRange } from "./pos";
-import { Errors } from "./type";
-
-type TailParams<T extends (...a: any[]) => any> = T extends (_: any, ...a: infer L) => any ? L : never
+import { TkRange } from "./pos";
+import { State, Context, WhenError, ReDo } from "./state_machine";
 
 const EOF = Symbol('EOF')
 type char = string | typeof EOF
-const ReDo = Symbol('ReDo')
-type BaseParserUnit = (c: char) => void | typeof ReDo | ParserUnit
-type ParserUnitFn = (ctx: Context, ...a: any[]) => BaseParserUnit
-interface ParserUnit {
-    fn: BaseParserUnit
-    ignoreFirst: boolean
-}
-
-class WhenError extends Error {
-    err: Errors
-    constructor(err: Errors) {
-        super()
-        this.err = err
-    }
-}
 
 const reg_Space = /\s/
 const reg_Num = /(\d|_)/
 
-class State {
-    count = 0
-    char = 0
-    line = 0
-    states: BaseParserUnit[] = []
-    lines: number[] = []
-    errors: Errors[] = []
-    show_all_err: boolean
-
-    constructor(show_all_err: boolean) {
-        this.show_all_err = show_all_err
-    }
-    push(unit: BaseParserUnit) {
-        this.states.push(unit)
-    }
-    pop() {
-        return this.states.pop()
-    }
-    call(c: char): void {
-        const r = this.states[this.states.length - 1](c)
-        if (c === EOF && this.states.length > 1) {
-            this.pop()
-            this.call(c)
-            return
-        }
-        if (!isVoid(r)) {
-            if (r === ReDo) {
-                this.call(c)
-            } else {
-                const { fn, ignoreFirst} = r
-                this.push(fn)
-                if (!ignoreFirst) this.call(c)
-            }
-        }
-    }
-    get pos() {
-        return new TkPos(this.count, this.char, this.line)
-    }
-    get lastPos() {
-        const np = new TkPos(this.count, this.char, this.line)
-        np.count--
-        if (np.char === 0) {
-            np.line--
-            np.char = this.lines[np.line]
-        } else np.char--
-        return np
-    }
-}
-
-class Context {
-    state: State
-    last_flag?: TkPos
-    constructor(state: State) {
-        this.state = state
-    }
-    end() {
-        this.state.pop()
-    }
-    call<F extends ParserUnitFn>(f: F, ...p: TailParams<F>): ParserUnit {
-        return {
-            fn: f(new Context(this.state), ...p),
-            ignoreFirst: false
-        }
-    }
-    callNoFirst<F extends ParserUnitFn>(f: F, ...p: TailParams<F>): ParserUnit {
-        return {
-            fn: f(new Context(this.state), ...p),
-            ignoreFirst: true
-        }
-    }
-    flag() {
-        this.last_flag = this.state.pos
-    }
-    range(last: boolean = false) {
-        const n = last ? this.state.lastPos : this.state.pos 
-        return new TkRange(this.last_flag ?? n, n)
-    }
-    error(range: TkRange, msg: string) {
-        if (!this.state.show_all_err) throw new WhenError({ range, msg })
-        this.state.errors.push({ range, msg })
-    }
-}
+type Ctx = Context<char>
 
 export function parser(code: string, show_all_err: boolean = false) {
-    const state = new State(show_all_err)
+    const state = new State<char>(show_all_err)
     let rootAst: Docs
     state.push(root(new Context(state), (d) => {
         rootAst = d
@@ -155,7 +56,7 @@ export function parser(code: string, show_all_err: boolean = false) {
     return rootAst!
 }
 
-function root(ctx: Context, finish: (docs: Docs) => void) {
+function root(ctx: Ctx, finish: (docs: Docs) => void) {
     const items: (Block | Arr)[] = []
     let errchar: boolean = false
     return (c: char) => {
@@ -190,7 +91,7 @@ function line_comment() {
 
 }
 
-function block(ctx: Context, finish: (block: Block) => void) {
+function block(ctx: Ctx, finish: (block: Block) => void) {
     const items: (KeyVal | Comma)[] = []
     ctx.flag()
     const begin = ctx.range()
@@ -198,6 +99,8 @@ function block(ctx: Context, finish: (block: Block) => void) {
         if (c === EOF) {
             ctx.flag()
             ctx.error(ctx.range(), 'Block is not closed')
+            ctx.end()
+            return ReDo
         } else if (reg_Space.test(c) || c === ',') {
             ctx.flag()
             items.push(new Comma(ctx.range()))
@@ -232,7 +135,7 @@ function block(ctx: Context, finish: (block: Block) => void) {
     }
 }
 
-function arr(ctx: Context, finish: (block: Arr) => void) {
+function arr(ctx: Ctx, finish: (block: Arr) => void) {
     const items: Unit[] = []
     ctx.flag()
     const begin = ctx.range()
@@ -240,6 +143,8 @@ function arr(ctx: Context, finish: (block: Arr) => void) {
         if (c === EOF) {
             ctx.flag()
             ctx.error(ctx.range(), 'Array is not closed')
+            ctx.end()
+            return ReDo
         } else if (c === ':' || c === '=') {
             ctx.flag()
             ctx.error(ctx.range(), 'Array cant have key')
@@ -265,7 +170,7 @@ function arr(ctx: Context, finish: (block: Arr) => void) {
     }
 }
 
-function key(ctx: Context, finish: (kv: KeyVal) => void) {
+function key(ctx: Ctx, finish: (kv: KeyVal) => void) {
     const chars: string[] = []
     let charsEnd = false
     let charsRange: TkRange | null = null
@@ -275,6 +180,8 @@ function key(ctx: Context, finish: (kv: KeyVal) => void) {
         if (c === EOF) {
             ctx.flag()
             ctx.error(ctx.range(), 'There should be a key value here')
+            ctx.end()
+            return ReDo
         } else if (s != null) {
             return ctx.call(val, v => {
                 const k = new Key(ctx.range(), s!)
@@ -380,11 +287,13 @@ function key(ctx: Context, finish: (kv: KeyVal) => void) {
     }
 }
 
-function val(ctx: Context, finish: (unit: Unit) => void) {
+function val(ctx: Ctx, finish: (unit: Unit) => void) {
     return (c: char) => {
         if (c === EOF) {
             ctx.flag()
             ctx.error(ctx.range(), 'There should be a value here')
+            ctx.end()
+            return ReDo
         } else if (reg_Space.test(c)) {
             return
         } else if (c === ',' || c === ':' || c === '=' || c === ']' || c === '}') {
@@ -422,15 +331,15 @@ function val(ctx: Context, finish: (unit: Unit) => void) {
     }
 }
 
-function num(ctx: Context, finish: (num: Num) => void) {
+function num(ctx: Ctx, finish: (num: Num) => void) {
     const int: string[] = []
     const float: string[] = []
     let dot = false
     ctx.flag()
     return (c: char) => { 
         if (c === EOF) {
-            const n = Number(`${int.join('')}.${float.join('')}`)
-            finish(new Num(ctx.range(true), n))
+            ctx.end()
+            return ReDo
         } else if (c === '.') {
             if (dot) {
                 ctx.flag()
@@ -449,13 +358,15 @@ function num(ctx: Context, finish: (num: Num) => void) {
     }
 }
 
-function str(ctx: Context, first: '"' | "'", finish: (s: Str) => void) {
+function str(ctx: Ctx, first: '"' | "'", finish: (s: Str) => void) {
     const chars: string[] = []
     ctx.flag()
     return (c: char) => { 
         if (c === EOF) {
             ctx.flag()
             ctx.error(ctx.range(), 'String is not closed')
+            ctx.end()
+            return ReDo
         } else if (c === '"' || c === "'") {
             if (c === first) {
                 const s = new Str(ctx.range(), chars.join(''), first)
@@ -471,7 +382,7 @@ function str(ctx: Context, first: '"' | "'", finish: (s: Str) => void) {
     }
 }
 
-function keyword(ctx: Context, finish: (u: Bool | Null) => void) {
+function keyword(ctx: Ctx, finish: (u: Bool | Null) => void) {
     const chars: string[] = []
     ctx.flag()
     return (c: char) => { 
@@ -481,7 +392,8 @@ function keyword(ctx: Context, finish: (u: Bool | Null) => void) {
             if (u == null) {
                 ctx.error(ctx.range(), 'Unknown keyword')
             }
-            finish(u!)
+            ctx.end()
+            return ReDo
         } else if (reg_Space.test(c) || c === '"' || c === "'" || c === ':' || c === '=' || c === ',' || c === '[' || c === '{' || c === ']' || c === '}') {
             const kw = chars.join('')
             const u = checkkeyword(kw, ctx.range())
