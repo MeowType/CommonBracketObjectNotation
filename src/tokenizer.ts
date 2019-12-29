@@ -192,7 +192,12 @@ function block_comment(ctx: Ctx, first: '/' | '#', flag: TkPos, finish: (c: TBlo
     const items: (string | TComments)[] = []
     let star = false
     ctx.last_flag = flag
+    let redo_end = false
     return (c: char) => {
+        if (redo_end) {
+            ctx.end()
+            return ReDo
+        }
         if (c === EOF) {
             if (star) chars.push('*')
             if (chars.length > 0) items.push(chars.join(''))
@@ -209,16 +214,15 @@ function block_comment(ctx: Ctx, first: '/' | '#', flag: TkPos, finish: (c: TBlo
                 star = false
                 if (c === first) {
                     return ctx.callNoFirst(comment_noerr, c, w => {
-                        if (w === EOF) {
-                            chars.push('*')
-                            chars.push(c)
-                        } else if (w instanceof TLineComment || w instanceof TBlockComment) {
+                        if (w instanceof TLineComment || w instanceof TBlockComment) {
                             if (chars.length > 0) items.push(chars.join(''))
+                            chars.length = 0
                             items.push(w)
                         } else {
-                            chars.push('*')
-                            chars.push(c)
-                            chars.push(w)
+                            if (chars.length > 0) items.push(chars.join(''))
+                            chars.length = 0
+                            redo_end = true
+                            finish(new TBlockComment(ctx.range(), items))
                         }
                     }, true)
                 } else {
@@ -231,6 +235,7 @@ function block_comment(ctx: Ctx, first: '/' | '#', flag: TkPos, finish: (c: TBlo
                         chars.push(c)
                     } else if (w instanceof TLineComment || w instanceof TBlockComment) {
                         if (chars.length > 0) items.push(chars.join(''))
+                        chars.length = 0
                         items.push(w)
                     } else {
                         chars.push(c)
@@ -241,6 +246,7 @@ function block_comment(ctx: Ctx, first: '/' | '#', flag: TkPos, finish: (c: TBlo
         } else {
             if (star) chars.push('*')
             star = false
+            chars.push(c)
         }
     }
 }
