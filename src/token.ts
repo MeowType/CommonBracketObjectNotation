@@ -10,18 +10,18 @@ export class TEOF extends Token {
 }
 export abstract class TComment extends Token { }
 export class TLineComment extends TComment {
-    items: (string | Comment)[]
+    items: (string | TComments)[]
     range: TkRange
-    constructor(range: TkRange, items: (string | Comment)[]) {
+    constructor(range: TkRange, items: (string | TComments)[]) {
         super()
         this.items = items
         this.range = range
     }
 }
 export class TBlockComment extends TComment {
-    items: (string | Comment)[]
+    items: (string | TComments)[]
     range: TkRange
-    constructor(range: TkRange, items: (string | Comment)[]) {
+    constructor(range: TkRange, items: (string | TComments)[]) {
         super()
         this.items = items
         this.range = range
@@ -81,5 +81,5 @@ export function makeTSymbol(range: TkRange, val: ',' | ':' | '=' | '[' | ']' | '
     }
 }
 
-
-export type Tokens = TEOF | TLineComment | TBlockComment | TWord | TStr | TSComma | TSSplit | TSArrStart | TSArrEnd | TSObjStart | TSObjEnd
+export type TComments = TLineComment | TBlockComment
+export type Tokens = TEOF | TComments | TWord | TStr | TSComma | TSSplit | TSArrStart | TSArrEnd | TSObjStart | TSObjEnd

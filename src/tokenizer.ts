@@ -1,7 +1,7 @@
-import { State, Context, ReDo, WhenError } from "./state_machine"
-import { Tokens, TEOF, TStr, TWord, makeTSymbol } from "./token"
+import { State, Context, ReDo, WhenError, ParserUnit } from "./state_machine"
+import { Tokens, TEOF, TStr, TWord, makeTSymbol, TComments, TBlockComment, TLineComment, TComment } from "./token"
 import { Errors } from "./type"
-import { TkRange } from "./pos"
+import { TkRange, TkPos } from "./pos"
 
 const EOF = Symbol('EOF')
 type char = string | typeof EOF
@@ -81,6 +81,8 @@ function root(ctx: Ctx, push: (t: Tokens) => void) {
             push(makeTSymbol(ctx.range(), c))
         } else if (c === '"' || c === "'") {
             return ctx.callNoFirst(str, c, push)
+        } else if (c === '/' || c === '#') {
+            return ctx.callNoFirst(comment, c, push)
         } else {
             return ctx.call(word, push)
         }
@@ -110,7 +112,7 @@ function str(ctx: Ctx, first: '"' | "'", push: (t: TStr) => void) {
     }
 }
 
-function word(ctx: Ctx, push: (t: TWord) => void) {
+function word(ctx: Ctx, push: (t: TWord | TComments) => void) {
     const chars: string[] = []
     ctx.flag()
     return (c: char) => { 
@@ -118,8 +120,127 @@ function word(ctx: Ctx, push: (t: TWord) => void) {
             push(new TWord(ctx.range(true), chars.join('')))
             ctx.end()
             return ReDo
+        } else if (c === '/' || c === '#') {
+            push(new TWord(ctx.range(true), chars.join('')))
+            ctx.end()
+            return ctx.callNoFirst(comment, c, push)
+        } else  {
+            chars.push(c)
+        }
+    }
+}
+
+const comment_noerr: (ctx: Ctx, first: '/' | '#', finish: (c: TComments | char) => void, nocc: true) => (c: char) => ParserUnit<char> = comment
+function comment(ctx: Ctx, first: '/' | '#', finish: (c: TComments | char) => void, nocc: true): (c: char) => ParserUnit<char>
+function comment(ctx: Ctx, first: '/' | '#', finish: (c: TComments) => void, nocc?: false): (c: char) => ParserUnit<char>
+function comment(ctx: Ctx, first: '/' | '#', finish: (c: TComments) => void, nocc: boolean = false) {
+    ctx.flag()
+    const flag = ctx.last_flag!
+    return (c: char) => {
+        ctx.end()
+        if (first === '/') {
+            if (c === '/') {
+                return ctx.callNoFirst(line_comment, first, flag, finish)
+            } else if (c === '*') {
+                return ctx.callNoFirst(block_comment, first, flag, finish)
+            } else {
+                if (nocc) {
+                    finish(c as any)
+                    if(c === EOF) return ReDo
+                }
+                else ctx.error(ctx.range(), 'Line Comment need two /')
+                return ctx.call(line_comment, first, flag, finish) 
+            }
+        } else {
+            if (c === '*') {
+                return ctx.callNoFirst(block_comment, first, flag, finish)
+            } else {
+                if (nocc) {
+                    finish(c as any)
+                    if (c === EOF) return ReDo
+                }
+                return ctx.call(line_comment, first, flag, finish)
+            }
+        }
+    }
+}
+
+function line_comment(ctx: Ctx, first: '/' | '#', flag: TkPos, finish: (c: TLineComment) => void) {
+    const chars: string[] = []
+    const items: (string | TComments)[] = []
+    ctx.last_flag = flag
+    return (c: char) => {
+        if (c === EOF || c === '\n' || c === '\r') {
+            if (chars.length > 0) items.push(chars.join(''))
+            ctx.end()
+            finish(new TLineComment(ctx.range(), items))
+            return ReDo
+        } else if (c === '/' || c === '#') {
+            if (chars.length > 0) items.push(chars.join(''))
+            chars.length = 0
+            return ctx.callNoFirst(comment, c, cm => {
+                items.push(cm)
+            })
         } else {
             chars.push(c)
+        }
+    }
+}
+
+function block_comment(ctx: Ctx, first: '/' | '#', flag: TkPos, finish: (c: TBlockComment) => void) {
+    const chars: string[] = []
+    const items: (string | TComments)[] = []
+    let star = false
+    ctx.last_flag = flag
+    return (c: char) => {
+        if (c === EOF) {
+            if (star) chars.push('*')
+            if (chars.length > 0) items.push(chars.join(''))
+            ctx.end()
+            finish(new TBlockComment(ctx.range(), items))
+            ctx.flag()
+            ctx.error(ctx.range(), 'Block Comment is not close')
+            return ReDo
+        } else if (c === '*') {
+            if (star) chars.push('*')
+            else star = true
+        } else if (c === '/' || c === '#') {
+            if (star) {
+                star = false
+                if (c === first) {
+                    return ctx.callNoFirst(comment_noerr, c, w => {
+                        if (w === EOF) {
+                            chars.push('*')
+                            chars.push(c)
+                        } else if (w instanceof TLineComment || w instanceof TBlockComment) {
+                            if (chars.length > 0) items.push(chars.join(''))
+                            items.push(w)
+                        } else {
+                            chars.push('*')
+                            chars.push(c)
+                            chars.push(w)
+                        }
+                    }, true)
+                } else {
+                    chars.push('*')
+                    chars.push(c)
+                }
+            } else {
+                return ctx.callNoFirst(comment_noerr, c, w => {
+                    if (w === EOF) {
+                        chars.push(c)
+                    } else if (w instanceof TLineComment || w instanceof TBlockComment) {
+                        if (chars.length > 0) items.push(chars.join(''))
+                        items.push(w)
+                    } else {
+                        chars.push(c)
+                        chars.push(w)
+                    }
+                }, true)
+            }
+        } else {
+            if (star) chars.push('*')
+            star = false
         }
     }
 }

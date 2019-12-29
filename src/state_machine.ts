@@ -6,9 +6,9 @@ type TailParams<T extends (...a: any[]) => any> = T extends (_: any, ...a: infer
 
 
 export const ReDo = Symbol('ReDo')
-type BaseParserUnit<Char> = (c: Char) => void | typeof ReDo | ParserUnit<Char>
-type ParserUnitFn<Char> = (ctx: Context<Char>, ...a: any[]) => BaseParserUnit<Char>
-interface ParserUnit<Char> {
+export type BaseParserUnit<Char> = (c: Char) => void | typeof ReDo | ParserUnit<Char>
+export type ParserUnitFn<Char> = (ctx: Context<Char>, ...a: any[]) => BaseParserUnit<Char>
+export interface ParserUnit<Char> {
     fn: BaseParserUnit<Char>
     ignoreFirst: boolean
 }
