@@ -1,14 +1,15 @@
-import { Docs, Block, Arr, Unit, Key, Str, Num, Bool, Null, Comma } from "./ast";
+import { Docs, Block, Arr, Units, Key, Str, Num, Bool, Null, Comma, LineComment, BlockComment } from "./ast";
 import { CbonVal, CbonObj, CbonArr } from "./type";
 
 export function toJsObj(doc: Docs) {
-    return doc.items.map(u => {
-        if (u instanceof Block) return block(u)
-        else return arr(u)
+    return doc.items.flatMap<CbonObj | CbonArr>(u => {
+        if (u instanceof Block) return [block(u)]
+        else if (u instanceof Arr) return [arr(u)]
+        else return []
     })
 }
 
-export function unit(u: Unit): CbonVal | undefined {
+export function unit(u: Units): CbonVal | undefined {
     if (u instanceof Block) return block(u)
     else if (u instanceof Arr) return arr(u)
     else if (u instanceof Num) return u.val

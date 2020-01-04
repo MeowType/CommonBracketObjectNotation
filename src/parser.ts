@@ -1,7 +1,6 @@
-import { Unit, Block, KeyVal, Arr, Key, Num, Str, Bool, Null, Docs, Comma, Split } from "./ast";
-import { TkRange } from "./pos";
+import { Block, KeyVal, Arr, Key, Num, Str, Bool, Null, Docs, Comma, Split, LineComment, BlockComment, Units, Comments } from "./ast";
 import { State, Context, WhenError, ReDo } from "./state_machine";
-import { Tokens, TEOF, TStr, TWord, TSObjStart, TSArrStart, TSComma, TSObjEnd, TSArrEnd, TSSplit } from "./token";
+import { Tokens, TEOF, TStr, TWord, TSObjStart, TSArrStart, TSComma, TSObjEnd, TSArrEnd, TSSplit, TLineComment, TBlockComment } from "./token";
 
 type Ctx = Context<Tokens>
 
@@ -27,7 +26,7 @@ export function parser(code: Tokens[], show_all_err: boolean = false) {
 }
 
 function root(ctx: Ctx, finish: (docs: Docs) => void) {
-    const items: (Block | Arr)[] = []
+    const items: (Block | Arr | Comments)[] = []
     return (t: Tokens) => {
         if (t instanceof TEOF) {
             finish(new Docs(items))
@@ -35,6 +34,10 @@ function root(ctx: Ctx, finish: (docs: Docs) => void) {
             return ctx.callNoFirst(block, t, b => items.push(b))
         } else if (t instanceof TSArrStart) {
             return ctx.callNoFirst(arr, t, a => items.push(a))
+        } else if (t instanceof TLineComment) {
+            items.push(new LineComment(t.range, t.items))
+        } else if (t instanceof TBlockComment) {
+            items.push(new BlockComment(t.range, t.items))
         } else {
             ctx.error(t.range, 'File root must have no content other than a document')
         }
@@ -71,7 +74,7 @@ function block(ctx: Ctx, begin: TSObjStart, finish: (block: Block) => void) {
 }
 
 function arr(ctx: Ctx, begin: TSArrStart, finish: (arr: Arr) => void) {
-    const items: Unit[] = []
+    const items: Units[] = []
     return (t: Tokens) => {
         if (t instanceof TEOF) {
             ctx.error(t.range, 'Array is not closed')
@@ -120,7 +123,7 @@ function key(ctx: Ctx, k: TStr | TWord, finish: (kv: KeyVal) => void) {
     }
 }
 
-function val(ctx: Ctx, finish: (u: Unit) => void) {
+function val(ctx: Ctx, finish: (u: Units) => void) {
     return (t: Tokens) => { 
         if (t instanceof TEOF) {
             ctx.error(t.range, 'There should be a value here')
