@@ -146,7 +146,7 @@ function comment(ctx: Ctx, first: '/' | '#', finish: (c: TComments) => void, noc
             } else {
                 if (nocc) {
                     finish(c as any)
-                    if(c === EOF) return ReDo
+                    return ReDo
                 }
                 else ctx.error(ctx.range(), 'Line Comment need two /')
                 return ctx.call(line_comment, first, flag, finish) 
@@ -157,7 +157,7 @@ function comment(ctx: Ctx, first: '/' | '#', finish: (c: TComments) => void, noc
             } else {
                 if (nocc) {
                     finish(c as any)
-                    if (c === EOF) return ReDo
+                    return ReDo
                 }
                 return ctx.call(line_comment, first, flag, finish)
             }
