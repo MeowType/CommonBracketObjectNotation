@@ -11,12 +11,12 @@ type Ctx = Context<char>
 
 const reg_Space = /\s/
 
-export function tokenizer(code: string | string[] | Iterable<string> | IterableIterator<string>, show_all_err: boolean, iterable: true, async: true): AsyncGenerator<Tokens, Errors[] | undefined, unknown>
-export function tokenizer(code: string | string[] | Iterable<string> | IterableIterator<string>, show_all_err: boolean, iterable: false, async: true): Promise<{ err?: Errors[], val: Tokens[] }>
-export function tokenizer(code: string | string[] | Iterable<string> | IterableIterator<string>, show_all_err: boolean, iterable: true, async: false): Generator<Tokens, Errors[] | undefined, unknown>
-export function tokenizer(code: string | string[] | Iterable<string> | IterableIterator<string>, show_all_err: boolean, iterable: false, async: false): { err?: Errors[], val: Tokens[] }
-export function tokenizer(code: string | string[] | Iterable<string> | IterableIterator<string>, show_all_err: boolean, iterable: boolean, async: boolean): AsyncGenerator<Tokens, Errors[] | undefined, unknown> | Generator<Tokens, Errors[] | undefined, unknown> | Promise<{ err?: Errors[], val: Tokens[] }> | { err?: Errors[], val: Tokens[] }
-export function tokenizer(code: string | string[] | Iterable<string> | IterableIterator<string>, show_all_err: boolean = false, iterable: boolean = false, async: boolean): any {
+export function tokenizer(code: string | string[] | Iterable<string>, show_all_err: boolean, iterable: true, async: true): AsyncGenerator<Tokens, Errors[] | undefined, unknown>
+export function tokenizer(code: string | string[] | Iterable<string>, show_all_err: boolean, iterable: false, async: true): Promise<{ err?: Errors[], val: Tokens[] }>
+export function tokenizer(code: string | string[] | Iterable<string>, show_all_err: boolean, iterable: true, async: false): Generator<Tokens, Errors[] | undefined, unknown>
+export function tokenizer(code: string | string[] | Iterable<string>, show_all_err: boolean, iterable: false, async: false): { err?: Errors[], val: Tokens[] }
+export function tokenizer(code: string | string[] | Iterable<string>, show_all_err: boolean, iterable: boolean, async: boolean): AsyncGenerator<Tokens, Errors[] | undefined, unknown> | Generator<Tokens, Errors[] | undefined, unknown> | Promise<{ err?: Errors[], val: Tokens[] }> | { err?: Errors[], val: Tokens[] }
+export function tokenizer(code: string | string[] | Iterable<string>, show_all_err: boolean = false, iterable: boolean = false, async: boolean = false): any {
     const state = new State<char>(show_all_err)
     const tokens: Tokens[] = []
     state.push(root(new Context(state), t => {

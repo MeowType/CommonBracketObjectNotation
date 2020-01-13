@@ -11,11 +11,14 @@ export function parser(code: string, confg: { alwaysDocs: true, show_all_err?: b
 export function parser(code: string, confg?: { alwaysDocs?: boolean, show_all_err?: boolean }): CbonObj | CbonArr | (CbonObj | CbonArr)[]
 export function parser(code: string, confg?: { alwaysDocs?: boolean, show_all_err?: boolean }): CbonObj | CbonArr | (CbonObj | CbonArr)[] {
     const errmsg: string[] = []
+    
+    let root: Docs
     try {
         const r = raw_parser(tokenizer(code, confg?.show_all_err ?? false, true, false), confg?.show_all_err ?? false, false)
-        if (!(r instanceof Docs)) {
-            errmsg.push(...getErrorsMsgs(r))
+        if (r.err != null) {
+            errmsg.push(...getErrorsMsgs(r.err))
         }
+        root = r.val
     } catch (e) {
         if (e instanceof WhenError) {
             errmsg.push(e.err.msg)
@@ -25,7 +28,8 @@ export function parser(code: string, confg?: { alwaysDocs?: boolean, show_all_er
     if (errmsg.length !== 0) {
         throw new SyntaxError(`\n    ${errmsg.join('\n    ')}\n`)
     }
-    const o = toJsObj(r as Docs)
+
+    const o = toJsObj(root!)
     if (confg?.alwaysDocs ?? false) return o
     if (o.length == 1) {
         return o[0]
