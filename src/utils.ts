@@ -33,9 +33,10 @@ export interface MaybeAsyncIterable<T> {
     [Symbol.asyncIterator]?: () => AsyncIterator<T>;
 }
 
-export function getIterator<T>(iter: AsyncIterable<T>): () => AsyncIterator<T>
-export function getIterator<T>(iter: Iterable<T>): () => Iterator<T>
-export function getIterator<T>(iter: MaybeAsyncIterable<T>): (() => AsyncIterator<T> ) | (() => Iterator<T>)
-export function getIterator<T>(iter: MaybeAsyncIterable<T>): any {
-    iter[Symbol.asyncIterator] ?? iter[Symbol.iterator]
+export function getIterator<T>(iter: AsyncIterable<T>): AsyncIterator<T>
+export function getIterator<T>(iter: Iterable<T>): Iterator<T>
+export function getIterator<T>(iter: MaybeAsyncIterable<T>): (AsyncIterator<T> ) | (Iterator<T>)
+export function getIterator<T>(iter: MaybeAsyncIterable<T>) {
+
+    return iter[Symbol.asyncIterator] != null ? iter[Symbol.asyncIterator]!() : iter[Symbol.iterator]!()
 }

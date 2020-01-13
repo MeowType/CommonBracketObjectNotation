@@ -18,7 +18,7 @@ export function parser(code: Tokens[] | Iterable<Tokens> | AsyncIterable<Tokens>
     }))
 
     let finish = false
-    const iter = getIterator(code)()
+    const iter = getIterator(code)
 
     function* main() {
         if (state.queue.length != 0) {
