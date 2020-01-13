@@ -7,10 +7,10 @@ import { _continue, _break } from "./loop";
 
 type Ctx = Context<Tokens>
 
-export function parser(code: Tokens[] | Iterable<Tokens> | AsyncIterable<Tokens>, show_all_err: boolean, async: true): Promise<{ err?: Errors[], val: Docs }>
-export function parser(code: Tokens[] | Iterable<Tokens>, show_all_err: boolean, async: false): { err?: Errors[], val: Docs }
-export function parser(code: Tokens[] | Iterable<Tokens> | AsyncIterable<Tokens>, show_all_err: boolean, async: boolean): Promise<{ err?: Errors[], val: Docs }> | { err?: Errors[], val: Docs }
-export function parser(code: Tokens[] | Iterable<Tokens> | AsyncIterable<Tokens>, show_all_err: boolean = false, async: boolean = false): any {
+export function parser(code: Tokens[] | Iterable<Tokens> | Generator<Tokens, Errors[] | undefined> | AsyncIterable<Tokens> | AsyncGenerator<Tokens, Errors[] | undefined>, show_all_err: boolean, async: true): Promise<{ err?: Errors[], val: Docs }>
+export function parser(code: Tokens[] | Iterable<Tokens> | Generator<Tokens, Errors[] | undefined>, show_all_err: boolean, async: false): { err?: Errors[], val: Docs }
+export function parser(code: Tokens[] | Iterable<Tokens> | Generator<Tokens, Errors[] | undefined> | AsyncIterable<Tokens> | AsyncGenerator<Tokens, Errors[] | undefined>, show_all_err: boolean, async: boolean): Promise<{ err?: Errors[], val: Docs }> | { err?: Errors[], val: Docs }
+export function parser(code: Tokens[] | Iterable<Tokens> | Generator<Tokens, Errors[] | undefined> | AsyncIterable<Tokens> | AsyncGenerator<Tokens, Errors[] | undefined>, show_all_err: boolean = false, async: boolean = false): any {
     const state = new State<Tokens>(show_all_err)
     let rootAst: Docs
     state.push(root(new Context(state), (d) => {
