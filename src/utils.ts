@@ -12,10 +12,12 @@ export function showErr(errmsg: string[]): never {
     throw new SyntaxError(`\n    ${errmsg.join('\n    ')}\n`)
 }
 
+/**  == queueMicrotask */
 export function next_micro_tick(): Promise<void> {
     return new Promise(res => res())
 }
 
+/** == setTimeout */
 export function next_macro_tick(): Promise<void> {
     return new Promise(res => {
         setTimeout(res)
