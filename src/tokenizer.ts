@@ -1,7 +1,9 @@
-import { State, Context, ReDo, WhenError, ParserUnit } from "./state_machine"
+import { State, Context, ReDo, ParserUnit } from "./state_machine"
 import { Tokens, TEOF, TStr, TWord, makeTSymbol, TComments, TBlockComment, TLineComment, TComment } from "./token"
 import { Errors } from "./type"
 import { TkRange, TkPos } from "./pos"
+import { _continue, _break } from "./loop"
+import { next_micro_tick } from "./utils"
 
 const EOF = Symbol('EOF')
 type char = string | typeof EOF
@@ -9,27 +11,37 @@ type Ctx = Context<char>
 
 const reg_Space = /\s/
 
-export function tokenizer(code: string, show_all_err: boolean = false): {
-    err?: Errors[],
-    val: Tokens[]
-} {
+export function tokenizer(code: string | string[] | Iterable<string>, show_all_err: boolean, iterable: true, async: true): AsyncGenerator<Tokens, Errors[] | undefined, unknown>
+export function tokenizer(code: string | string[] | Iterable<string>, show_all_err: boolean, iterable: false, async: true): Promise<{ err?: Errors[], val: Tokens[] }>
+export function tokenizer(code: string | string[] | Iterable<string>, show_all_err: boolean, iterable: true, async: false): Generator<Tokens, Errors[] | undefined, unknown>
+export function tokenizer(code: string | string[] | Iterable<string>, show_all_err: boolean, iterable: false, async: false): { err?: Errors[], val: Tokens[] }
+export function tokenizer(code: string | string[] | Iterable<string>, show_all_err: boolean, iterable: boolean, async: boolean): AsyncGenerator<Tokens, Errors[] | undefined, unknown> | Generator<Tokens, Errors[] | undefined, unknown> | Promise<{ err?: Errors[], val: Tokens[] }> | { err?: Errors[], val: Tokens[] }
+export function tokenizer(code: string | string[] | Iterable<string>, show_all_err: boolean = false, iterable: boolean = false, async: boolean = false): any {
     const state = new State<char>(show_all_err)
     const tokens: Tokens[] = []
     state.push(root(new Context(state), t => {
         tokens.push(t)
     }))
     let last: null | '\r' | '\n' = null
-    for (const c of code) {
-        try {
-            state.call(c)
-        } catch (e) {
-            if (e instanceof WhenError) {
-                return {
-                    err: [e.err],
-                    val: tokens
-                }
-            } else throw e
+    let finish = false
+    const iter = code[Symbol.iterator]()
+
+    function main() {
+        if (state.queue.length != 0) {
+            state.queue.pop()!()
+            return _continue
         }
+        let c: char
+        if (finish) c = EOF
+        else {
+            const r = iter.next()
+            if (r.done === true) {
+                finish = true
+                return _continue
+            } else c = r.value
+        }
+        state.call(c)
+        if (finish) return _break
         state.count++
         if (c === '\n') {
             if (last !== '\r') {
@@ -48,26 +60,64 @@ export function tokenizer(code: string, show_all_err: boolean = false): {
             last = null
         }
     }
-    try {
-        state.call(EOF)
-    } catch (e) {
-        if (e instanceof WhenError) {
-            return {
-                err: [e.err],
-                val: tokens
+
+    const loop = iterable ? async ? async function* () {
+        let finish = false
+        while (true) {
+            await next_micro_tick()
+            if (tokens.length !== 0) {
+                yield tokens.shift()!
             }
-        } else throw e
-    }
-    if (state.errors.length !== 0) {
-        return {
-            err: state.errors,
-            val: tokens
+            if (finish) break
+            const s = main()
+            if (s === _continue) continue
+            if (s === _break) {
+                finish = true
+                continue
+            }
         }
+        yield new TEOF(new TkRange(state.pos, state.pos))
+        if (state.errors.length !== 0) return state.errors
+    } : function* () {
+        let finish = false
+        while (true) {
+            if (tokens.length !== 0) {
+                yield tokens.shift()!
+            }
+            if (finish) break
+            const s = main()
+            if (s === _continue) continue
+            if (s === _break) {
+                finish = true
+                continue
+            }
+        }
+        yield new TEOF(new TkRange(state.pos, state.pos))
+        if (state.errors.length !== 0) return state.errors
+    } : async ? async function() {
+        while (true) {
+            await next_micro_tick()
+            const s = main()
+            if (s === _continue) continue
+            if (s === _break) break
+        }
+
+        tokens.push(new TEOF(new TkRange(state.pos, state.pos)))
+
+        return state.errors.length !== 0 ? { err: state.errors, val: tokens } : { val: tokens }
+    } : function() {
+        while (true) {
+            const s = main()
+            if (s === _continue) continue
+            if (s === _break) break
+        }
+
+        tokens.push(new TEOF(new TkRange(state.pos, state.pos)))
+
+        return state.errors.length !== 0 ? { err: state.errors, val: tokens } : { val: tokens }
     }
-    tokens.push(new TEOF(new TkRange(state.pos, state.pos)))
-    return {
-        val: tokens
-    }
+
+    return loop()
 }
 
 function root(ctx: Ctx, push: (t: Tokens) => void) {

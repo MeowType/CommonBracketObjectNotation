@@ -1,28 +1,67 @@
 import { Block, KeyVal, Arr, Key, Num, Str, Bool, Null, Docs, Comma, Split, LineComment, BlockComment, Units, Comments } from "./ast";
 import { State, Context, WhenError, ReDo } from "./state_machine";
 import { Tokens, TEOF, TStr, TWord, TSObjStart, TSArrStart, TSComma, TSObjEnd, TSArrEnd, TSSplit, TLineComment, TBlockComment } from "./token";
+import { Errors } from "./type";
+import { getIterator, next_micro_tick } from "./utils";
+import { _continue, _break } from "./loop";
 
 type Ctx = Context<Tokens>
 
-export function parser(code: Tokens[], show_all_err: boolean = false) {
+export function parser(code: Tokens[] | Iterable<Tokens> | AsyncIterable<Tokens>, show_all_err: boolean, async: true): Promise<{ err?: Errors[], val: Docs }>
+export function parser(code: Tokens[] | Iterable<Tokens>, show_all_err: boolean, async: false): { err?: Errors[], val: Docs }
+export function parser(code: Tokens[] | Iterable<Tokens> | AsyncIterable<Tokens>, show_all_err: boolean, async: boolean): Promise<{ err?: Errors[], val: Docs }> | { err?: Errors[], val: Docs }
+export function parser(code: Tokens[] | Iterable<Tokens> | AsyncIterable<Tokens>, show_all_err: boolean = false, async: boolean = false): any {
     const state = new State<Tokens>(show_all_err)
     let rootAst: Docs
     state.push(root(new Context(state), (d) => {
         rootAst = d
     }))
-    for (const c of code) {
-        try {
-            state.call(c)
-        } catch (e) {
-            if (e instanceof WhenError) {
-                return [e.err]
-            } else throw e
+
+    let finish = false
+    const iter = getIterator(code)
+
+    function* main() {
+        if (state.queue.length != 0) {
+            state.queue.pop()!()
+            return _continue
         }
+        if (finish) return _break
+        const c: IteratorResult<Tokens> = yield iter.next()
+        if (c.done === true) {
+            finish = true
+            return _continue
+        }
+        state.call(c.value)
     }
-    if (state.errors.length !== 0) {
-        return state.errors
+
+    const loop = async ? async function () {
+        while (true) {
+            await next_micro_tick()
+            const g = main()
+            let y = g.next()
+            if (!y.done) {
+                y = g.next(await y.value)
+            } 
+            const s = y.value
+            if (s === _continue) continue
+            if (s === _break) break
+        }
+        return state.errors.length !== 0 ? { err: state.errors, val: rootAst! } : { err: state.errors, val: rootAst! }
+    } : function () {
+        while (true) {
+            const g = main()
+            let y = g.next()
+            if (!y.done) {
+                y = g.next(y.value as any)
+            }
+            const s = y.value
+            if (s === _continue) continue
+            if (s === _break) break
+        }
+        return state.errors.length !== 0 ? { err: state.errors, val: rootAst! } : { err: state.errors, val: rootAst! }
     }
-    return rootAst!
+
+    return loop()
 }
 
 function root(ctx: Ctx, finish: (docs: Docs) => void) {

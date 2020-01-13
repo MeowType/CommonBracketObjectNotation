@@ -29,6 +29,7 @@ export class State<Char> {
     lines: number[] = []
     errors: Errors[] = []
     show_all_err: boolean
+    queue: (() => void)[] = []
 
     constructor(show_all_err: boolean) {
         this.show_all_err = show_all_err
@@ -43,11 +44,11 @@ export class State<Char> {
         const r = this.states[this.states.length - 1](c)
         if (!isVoid(r)) {
             if (r === ReDo) {
-                this.call(c)
+                this.queue.push(() => this.call(c))
             } else {
                 const { fn, ignoreFirst } = r
                 this.push(fn)
-                if (!ignoreFirst) this.call(c)
+                if (!ignoreFirst) this.queue.push(() => this.call(c))
             }
         }
     }
