@@ -4,14 +4,22 @@ import { Tokens, TEOF, TStr, TWord, TSObjStart, TSArrStart, TSComma, TSObjEnd, T
 import { Errors } from "./type";
 import { getIterator, next_micro_tick } from "./utils";
 import { _continue, _break } from "./loop";
+import { Canceller, AsyncCanceller, AlwaysFalse } from "./canceller";
 
 type Ctx = Context<Tokens>
 
-export function parser(code: Tokens[] | Iterable<Tokens> | Generator<Tokens, Errors[] | undefined> | AsyncIterable<Tokens> | AsyncGenerator<Tokens, Errors[] | undefined>, show_all_err: boolean, async: true): Promise<{ err?: Errors[], val: Docs }>
-export function parser(code: Tokens[] | Iterable<Tokens> | Generator<Tokens, Errors[] | undefined>, show_all_err: boolean, async: false): { err?: Errors[], val: Docs }
-export function parser(code: Tokens[] | Iterable<Tokens> | Generator<Tokens, Errors[] | undefined> | AsyncIterable<Tokens> | AsyncGenerator<Tokens, Errors[] | undefined>, show_all_err: boolean, async: boolean): Promise<{ err?: Errors[], val: Docs }> | { err?: Errors[], val: Docs }
-export function parser(code: Tokens[] | Iterable<Tokens> | Generator<Tokens, Errors[] | undefined> | AsyncIterable<Tokens> | AsyncGenerator<Tokens, Errors[] | undefined>, show_all_err: boolean = false, async: boolean = false): any {
-    const state = new State<Tokens>(show_all_err)
+export type token_list = Tokens[] | Iterable<Tokens> | Generator<Tokens, Errors[] | undefined>
+export type async_token_list = token_list | AsyncIterable<Tokens> | AsyncGenerator<Tokens, Errors[] | undefined>
+export function parser(code: async_token_list, config: { show_all_err?: boolean, async: true, cancel?: Canceller | AsyncCanceller }): Promise<{ err?: Errors[], val: Docs }>
+export function parser(code: token_list, config: { show_all_err?: boolean, async: false, cancel?: Canceller }): { err?: Errors[], val: Docs }
+export function parser(code: token_list, config?: { show_all_err?: boolean, cancel?: Canceller }): { err?: Errors[], val: Docs }
+export function parser(code: async_token_list, config?: { show_all_err?: boolean, async?: boolean, cancel?: Canceller | AsyncCanceller }): Promise<{ err?: Errors[], val: Docs }> | { err?: Errors[], val: Docs }
+export function parser(code: async_token_list,
+    config: { show_all_err?: boolean, async?: boolean, cancel?: Canceller | AsyncCanceller }
+    = { show_all_err: false, async: false, cancel: AlwaysFalse }
+): any {
+    const cancel = config?.cancel ?? AlwaysFalse
+    const state = new State<Tokens>(config?.show_all_err ?? false)
     let rootAst: Docs
     state.push(root(new Context(state), (d) => {
         rootAst = d
@@ -34,8 +42,9 @@ export function parser(code: Tokens[] | Iterable<Tokens> | Generator<Tokens, Err
         state.call(c.value)
     }
 
-    const loop = async ? async function () {
+    const loop = config?.async ?? false ? async function () {
         while (true) {
+            if (await cancel()) break
             await next_micro_tick()
             const g = main()
             let y = g.next()
@@ -49,6 +58,7 @@ export function parser(code: Tokens[] | Iterable<Tokens> | Generator<Tokens, Err
         return state.errors.length !== 0 ? { err: state.errors, val: rootAst! } : { err: state.errors, val: rootAst! }
     } : function () {
         while (true) {
+            if (cancel()) break
             const g = main()
             let y = g.next()
             if (!y.done) {
