@@ -166,9 +166,65 @@ function str(ctx: Ctx, first: '"' | "'", push: (t: TStr) => void) {
             } else {
                 chars.push(c)
             }
+        } else if (c === '\\') {
+            return ctx.callNoFirst(escape, c => chars.push(c))
         } else {
-            //todo escape
             chars.push(c)
+        }
+    }
+}
+
+const hex_digits = /[0-9a-fA-F]/i
+function escape(ctx: Ctx, push: (c: string) => void) {
+    let onUnicode = false
+    let chars: string[] = []
+    let block = false
+    ctx.flag()
+    return (c: char) => {
+        if (onUnicode) {
+            if (c === EOF) {
+                ctx.error(ctx.range(), 'Unicode escape is not finish')
+                ctx.end()
+                return ReDo
+            } else if (hex_digits.test(c)) {
+                chars.push(c)
+                if (!block && chars.length === 4) {
+                    ctx.end()
+                    push(String.fromCodePoint(Number(`0x${chars.join('')}`)))
+                }
+            } else if (c === '{') {
+                if (chars.length !== 0 || block) {
+                    ctx.error(ctx.range(), 'Unicode escape is not finish')
+                    ctx.end()
+                    return ReDo
+                }
+                block = true
+            } else if (c === '}') {
+                ctx.end()
+                if (!block) {
+                    ctx.error(ctx.range(), 'Not in Unicode escape block')
+                    return
+                } else if (chars.length === 0 || chars.length > 6) {
+                    ctx.error(ctx.range(), 'Invalid Unicode escape sequence')
+                    return
+                }
+                push(String.fromCodePoint(Number(`0x${chars.join('')}`)))
+            } else {
+                ctx.error(ctx.range(), 'Unicode escape is not finish')
+                ctx.end()
+                return ReDo
+            }
+        } else {
+            if (c === 'u') {
+                onUnicode = true
+            } else {
+                ctx.end()
+                if (c === EOF) {
+                    return ReDo
+                } else {
+                    push(c === 'n' ? '\n' : c === 'r' ? '\r' : c === 't' ? '\t' : c === '\\' ? '\\' : c === '"' ? '"' : c === "'" ? "'" : c === '0' ? '\0' : c === 'b' ? '\b' : c === 'f' ? '\f' : c === 'v' ? '\v' : c)
+                }
+            }
         }
     }
 }
