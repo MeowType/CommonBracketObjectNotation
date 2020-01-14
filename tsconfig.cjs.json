@@ -1,13 +1,11 @@
 {
     "compilerOptions": {
         "target": "es2020",
-        "module": "esnext",
+        "module": "CommonJS",
         "moduleResolution": "node",
         "strict": true,
         "experimentalDecorators": true,
-        "outDir": "dist/es",
-        "declaration": true,
-        "declarationDir": "type",
+        "outDir": "dist/cjs",
         "esModuleInterop": true,
         "stripInternal": true,
     },
