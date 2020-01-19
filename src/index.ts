@@ -14,6 +14,8 @@ export function parser(code: string, confg: { alwaysDocs: true, show_all_err?: b
 export function parser(code: string, confg?: { alwaysDocs?: boolean, show_all_err?: boolean, async?: boolean, cancel?: Canceller | AsyncCanceller }): (CbonObj | CbonArr) | (CbonObj | CbonArr)[] | Promise<CbonObj | CbonArr> | Promise<(CbonObj | CbonArr)[]>
 export function parser(code: string, confg?: { alwaysDocs?: boolean, show_all_err?: boolean, async?: boolean, cancel?: Canceller | AsyncCanceller }): (CbonObj | CbonArr) | (CbonObj | CbonArr)[] | Promise<CbonObj | CbonArr> | Promise<(CbonObj | CbonArr)[]> {
     const cancel = confg?.cancel ?? AlwaysFalse
+    const show_all_err = confg?.show_all_err ?? false
+    const async = confg?.async ?? false
     let isCancel = false
     const errmsg: string[] = []
     
@@ -22,14 +24,14 @@ export function parser(code: string, confg?: { alwaysDocs?: boolean, show_all_er
     function* main(cancel: Canceller | AsyncCanceller) {
         try {
             const r = yield raw_parser(yield tokenizer(code, {
-                show_all_err: confg?.show_all_err ?? false,
+                show_all_err,
                 iterable: true,
-                async: confg?.async ?? false,
-                cancel: cancel
+                async,
+                cancel
             }), {
-                show_all_err: confg?.show_all_err ?? false, 
-                async: confg?.async ?? false,
-                cancel: cancel
+                show_all_err, 
+                async,
+                cancel
             })
             if (r.err != null) {
                 errmsg.push(...getErrorsMsgs(r.err))
@@ -47,7 +49,7 @@ export function parser(code: string, confg?: { alwaysDocs?: boolean, show_all_er
 
         if(yield/** is cancel */) return null
 
-        const o = toJsObj(root!)
+        const o = yield toJsObj(root!, { async })
         if (confg?.alwaysDocs ?? false) return o
         if (o.length == 1) {
             return o[0]
@@ -60,16 +62,16 @@ export function parser(code: string, confg?: { alwaysDocs?: boolean, show_all_er
             return isCancel
         }
         const g = main(Cancel)
-        g.next(await g.next(await g.next().value as any).value as any)
-        return g.next(await Cancel() as any).value as (CbonObj | CbonArr) | (CbonObj | CbonArr)[]
+        g.next(await g.next(await g.next().value).value)
+        return g.next(await g.next(await Cancel() as any).value).value as (CbonObj | CbonArr) | (CbonObj | CbonArr)[]
     } : function () {
         function Cancel() {
             if (!isCancel) isCancel = cancel() as boolean
             return isCancel
         }
         const g = main(Cancel) 
-        g.next(g.next(g.next().value as any).value as any)
-        return g.next(Cancel() as any).value as (CbonObj | CbonArr) | (CbonObj | CbonArr)[]
+        g.next(g.next(g.next().value).value)
+        return g.next(g.next(Cancel() as any).value).value as (CbonObj | CbonArr) | (CbonObj | CbonArr)[]
     }
     
     return def()

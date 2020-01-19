@@ -1,9 +1,6 @@
-import { Errors } from "./type"
+import { Errors, TailParams } from "./type"
 import { isVoid } from "./utils"
 import { TkPos, TkRange } from "./pos"
-
-type TailParams<T extends (...a: any[]) => any> = T extends (_: any, ...a: infer L) => any ? L : never
-
 
 export const ReDo = Symbol('ReDo')
 export type BaseParserUnit<Char> = (c: Char) => void | typeof ReDo | ParserUnit<Char>
