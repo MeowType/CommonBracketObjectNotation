@@ -72,17 +72,21 @@ export function tokenizer(code: char_list,
         let finish = false
         while (true) {
             if (await cancel()) break
-            await next_micro_tick()
             if (tokens.length !== 0) {
                 yield tokens.shift()!
             }
             if (finish) break
             const s = main()
-            if (s === _continue) continue
-            if (s === _break) {
-                finish = true
+            if (s === _continue) {
+                await next_micro_tick()
                 continue
             }
+            if (s === _break) {
+                finish = true
+                await next_micro_tick()
+                continue
+            }
+            await next_micro_tick()
         }
         yield new TEOF(new TkRange(state.pos, state.pos))
         if (state.errors.length !== 0) return state.errors
@@ -106,10 +110,13 @@ export function tokenizer(code: char_list,
     } : config?.async?? false ? async function() {
             while (true) {
             if (await cancel()) break
-            await next_micro_tick()
             const s = main()
-            if (s === _continue) continue
+            if (s === _continue) {
+                await next_micro_tick()
+                continue
+            }
             if (s === _break) break
+            await next_micro_tick()
         }
 
         tokens.push(new TEOF(new TkRange(state.pos, state.pos)))

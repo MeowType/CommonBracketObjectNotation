@@ -13,9 +13,7 @@ export function showErr(errmsg: string[]): never {
 }
 
 /**  == queueMicrotask */
-export function next_micro_tick(): Promise<void> {
-    return new Promise(res => res())
-}
+export async function next_micro_tick() {}
 
 /** == setTimeout */
 export function next_macro_tick(): Promise<void> {

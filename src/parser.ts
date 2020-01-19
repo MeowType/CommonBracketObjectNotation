@@ -45,15 +45,18 @@ export function parser(code: async_token_list,
     const loop = config?.async ?? false ? async function () {
         while (true) {
             if (await cancel()) break
-            await next_micro_tick()
             const g = main()
             let y = g.next()
             if (!y.done) {
                 y = g.next(await y.value)
             } 
             const s = y.value
-            if (s === _continue) continue
+            if (s === _continue) {
+                await next_micro_tick()
+                continue
+            }
             if (s === _break) break
+            await next_micro_tick()
         }
         return state.errors.length !== 0 ? { err: state.errors, val: rootAst! } : { err: state.errors, val: rootAst! }
     } : function () {
