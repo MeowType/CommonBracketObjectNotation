@@ -1,7 +1,10 @@
-import { parser } from '../src/index'
+import { parser, stringify } from '../src/index'
 
 (async () => {
-    const r = await parser(`{a '\\n\\r\\u{2a5f}'}`, { show_all_err: true, async: true })
+    const s = stringify({ a: { b: 2 }, c: [1, 2.5] })
+    console.log(s)
+
+    const r = await parser(s!, { show_all_err: true, async: true })
 
     console.log(JSON.stringify(r))
 })()

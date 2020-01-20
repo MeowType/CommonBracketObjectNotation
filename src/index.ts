@@ -6,6 +6,7 @@ import { getErrorsMsgs } from "./utils";
 import { tokenizer } from "./tokenizer";
 import { WhenError } from "./state_machine";
 import { Canceller, AsyncCanceller, AlwaysFalse } from "./canceller";
+export * from './stringify'
 
 export function parser(code: string, config: { alwaysDocs?: false, show_all_err?: boolean, async: true, cancel?: Canceller | AsyncCanceller }): Promise<CbonObj | CbonArr>
 export function parser(code: string, config: { alwaysDocs: true, show_all_err?: boolean, async: true, cancel?: Canceller | AsyncCanceller }): Promise<(CbonObj | CbonArr)[]>
